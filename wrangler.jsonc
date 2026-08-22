@@ -2,13 +2,9 @@
  * For more details on how to configure Wrangler, refer to:
  * https://developers.cloudflare.com/workers/wrangler/configuration/
  */
-/**
- * For more details on how to configure Wrangler, refer to:
- * https://developers.cloudflare.com/workers/wrangler/configuration/
- */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "my-next-app",
+	"name": "matthewtech",
 	"main": ".open-next/worker.js",
 	"compatibility_date": "2026-06-05",
 	"compatibility_flags": [
@@ -29,9 +25,12 @@
 			// Self-reference service binding, the service name must match the worker name
 			// see https://opennext.js.org/cloudflare/caching
 			"binding": "WORKER_SELF_REFERENCE",
-			"service": "my-next-app"
+			"service": "matthewtech"
 		}
 	],
+	"vars": {
+		"SITE_VERSION": "2026.08.22.001"
+	},
 	"observability": {
 		"enabled": true
 	},
@@ -53,5 +52,4 @@
 	 * Note: Use secrets to store sensitive data.
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
 	 */
-	// "vars": {  "MY_VARIABLE": "production_value" }
 }
