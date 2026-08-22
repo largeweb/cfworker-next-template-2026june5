@@ -29,7 +29,7 @@
 		}
 	],
 	"vars": {
-		"SITE_VERSION": "2026.08.22.001"
+		"SITE_VERSION": "2026.08.22.002"
 	},
 	"observability": {
 		"enabled": true
