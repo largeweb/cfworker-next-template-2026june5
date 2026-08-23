@@ -28,8 +28,14 @@
 			"service": "matthewtech"
 		}
 	],
+	"kv_namespaces": [
+		{
+			"binding": "WORLDSIM_KV",
+			"id": "b41a782deaa64f75b97b370b27660e93"
+		}
+	],
 	"vars": {
-		"SITE_VERSION": "2026.08.22.003"
+		"SITE_VERSION": "2026.08.23.001"
 	},
 	"observability": {
 		"enabled": true

@@ -97,6 +97,25 @@ export default function Home() {
         </section>
 
         <section className="mb-20">
+          <Link
+            href="/world"
+            className="group inline-flex items-center gap-3 px-5 py-3 bg-[#1a1815] border border-[#3d3835] rounded hover:border-[#6b7c5a] transition-colors"
+          >
+            <span
+              className="w-6 h-6 flex items-center justify-center rounded bg-[#c4644a] text-[#f5f1e6] text-xs font-bold"
+              aria-hidden="true"
+            >
+              ✧
+            </span>
+            <span className="text-sm text-[#c4b8a4] group-hover:text-[#d9d0c0] transition-colors">
+              <span className="font-medium text-[#f5f1e6]">The Garden</span>
+              <span className="mx-2 text-[#5c574e]">·</span>
+              field notes from Genesis-001
+            </span>
+          </Link>
+        </section>
+
+        <section className="mb-20">
           <h2 className="text-sm font-bold tracking-[0.2em] text-[#e9a11a] uppercase mb-8">
             Background
           </h2>
