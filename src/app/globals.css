@@ -5,6 +5,28 @@
 	--foreground: #f4efe4;
 	--amber: #e9a11a;
 	--muted: #8a8376;
+
+	/* Genesis-001 Garden Theme */
+	--garden-paper: #f5f1e6;
+	--garden-paper-dark: #e8e2d3;
+	--garden-ink: #2c2a24;
+	--garden-ink-light: #5c574e;
+	--garden-olive: #6b7c5a;
+	--garden-olive-dark: #4a5a3d;
+	--garden-dust: #c4b8a4;
+	--garden-dust-light: #d9d0c0;
+	--garden-terracotta: #c4644a;
+	--garden-terracotta-dark: #a34d38;
+	--garden-coal: #3d3835;
+	--garden-gold: #d4a54a;
+	--garden-reed: #b8b0a0;
+	--garden-thorn: #4a4540;
+	--garden-night-bg: #1a1815;
+	--garden-night-glow: #8b7355;
+	--garden-ember: #e87c3f;
+	--garden-wood: #8b6f47;
+	--garden-wood-dark: #5c4a32;
+	--garden-felt: #3a5a3a;
 }
 
 @theme inline {
