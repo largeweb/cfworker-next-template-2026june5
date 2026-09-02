@@ -14,8 +14,9 @@ function useSharedAnimationTime() {
     let frame: number;
     const animate = () => {
       if (!mountedRef.current) return;
-      setTime((t) => t + 0.02);
       frame = requestAnimationFrame(animate);
+      if (document.hidden) return;
+      setTime((t) => t + 0.02);
     };
     frame = requestAnimationFrame(animate);
     return () => {
