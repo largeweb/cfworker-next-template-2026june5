@@ -1,32 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ViewProps } from "../WorldCanvas";
 import { getAgentSymbolType } from "@/lib/world-types";
 import type { Agent, Sign, WorldEvent } from "@/lib/world-types";
-
-function useSharedAnimationTime() {
-  const [time, setTime] = useState(0);
-  const mountedRef = useRef(true);
-  
-  useEffect(() => {
-    mountedRef.current = true;
-    let frame: number;
-    const animate = () => {
-      if (!mountedRef.current) return;
-      frame = requestAnimationFrame(animate);
-      if (document.hidden) return;
-      setTime((t) => t + 0.02);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => {
-      mountedRef.current = false;
-      cancelAnimationFrame(frame);
-    };
-  }, []);
-  
-  return time;
-}
 
 const CELL_SIZE = 52;
 const MIN_ZOOM = 0.3;
@@ -68,36 +45,11 @@ function DiceRoll({
   const diceFace = (n: number) => {
     const dots: Record<number, [number, number][]> = {
       1: [[50, 50]],
-      2: [
-        [25, 25],
-        [75, 75],
-      ],
-      3: [
-        [25, 25],
-        [50, 50],
-        [75, 75],
-      ],
-      4: [
-        [25, 25],
-        [75, 25],
-        [25, 75],
-        [75, 75],
-      ],
-      5: [
-        [25, 25],
-        [75, 25],
-        [50, 50],
-        [25, 75],
-        [75, 75],
-      ],
-      6: [
-        [25, 25],
-        [75, 25],
-        [25, 50],
-        [75, 50],
-        [25, 75],
-        [75, 75],
-      ],
+      2: [[25, 25], [75, 75]],
+      3: [[25, 25], [50, 50], [75, 75]],
+      4: [[25, 25], [75, 25], [25, 75], [75, 75]],
+      5: [[25, 25], [75, 25], [50, 50], [25, 75], [75, 75]],
+      6: [[25, 25], [75, 25], [25, 50], [75, 50], [25, 75], [75, 75]],
     };
     return dots[n] || dots[1];
   };
@@ -110,43 +62,17 @@ function DiceRoll({
           <span className="font-bold">{defender}</span>
         </div>
         <div className="flex gap-4 justify-center">
-          <svg
-            width="60"
-            height="60"
-            viewBox="0 0 100 100"
-            className={`bg-[var(--garden-paper)] rounded-lg shadow-lg ${
-              rolling ? "animate-bounce" : ""
-            }`}
-          >
-            <rect
-              width="100"
-              height="100"
-              fill="var(--garden-paper)"
-              rx="10"
-              stroke="var(--garden-wood)"
-              strokeWidth="3"
-            />
+          <svg width="60" height="60" viewBox="0 0 100 100"
+            className={`bg-[var(--garden-paper)] rounded-lg shadow-lg ${rolling ? "animate-bounce" : ""}`}>
+            <rect width="100" height="100" fill="var(--garden-paper)" rx="10" stroke="var(--garden-wood)" strokeWidth="3" />
             {diceFace(roll1).map(([x, y], i) => (
               <circle key={i} cx={x} cy={y} r="10" fill="var(--garden-ink)" />
             ))}
           </svg>
-          <svg
-            width="60"
-            height="60"
-            viewBox="0 0 100 100"
-            className={`bg-[var(--garden-terracotta)] rounded-lg shadow-lg ${
-              rolling ? "animate-bounce" : ""
-            }`}
-            style={{ animationDelay: "50ms" }}
-          >
-            <rect
-              width="100"
-              height="100"
-              fill="var(--garden-terracotta)"
-              rx="10"
-              stroke="var(--garden-terracotta-dark)"
-              strokeWidth="3"
-            />
+          <svg width="60" height="60" viewBox="0 0 100 100"
+            className={`bg-[var(--garden-terracotta)] rounded-lg shadow-lg ${rolling ? "animate-bounce" : ""}`}
+            style={{ animationDelay: "50ms" }}>
+            <rect width="100" height="100" fill="var(--garden-terracotta)" rx="10" stroke="var(--garden-terracotta-dark)" strokeWidth="3" />
             {diceFace(roll2).map(([x, y], i) => (
               <circle key={i} cx={x} cy={y} r="10" fill="var(--garden-paper)" />
             ))}
@@ -154,8 +80,7 @@ function DiceRoll({
         </div>
         {!rolling && (
           <div className="text-center mt-4 text-[var(--garden-gold)] font-bold">
-            {roll1} vs {roll2} —{" "}
-            {roll1 >= roll2 ? `${attacker} prevails!` : `${defender} holds!`}
+            {roll1} vs {roll2} — {roll1 >= roll2 ? `${attacker} prevails!` : `${defender} holds!`}
           </div>
         )}
       </div>
@@ -178,7 +103,6 @@ function TabletopToken({
   isSleeping,
   onClick,
   isSelected,
-  animTime,
 }: {
   agent: Agent;
   position: Position;
@@ -186,84 +110,35 @@ function TabletopToken({
   isSleeping: boolean;
   onClick: () => void;
   isSelected: boolean;
-  animTime: number;
 }) {
   const symbolType = getAgentSymbolType(agent.symbol);
   const c = TOKEN_COLORS[symbolType];
-  const wobbleX = Math.sin(animTime) * (isSleeping ? 0 : 1);
-  const wobbleY = Math.cos(animTime * 0.7) * (isSleeping ? 0 : 0.5);
 
   return (
     <g
-      transform={`translate(${position.x * CELL_SIZE + CELL_SIZE / 2 + wobbleX}, ${
-        position.y * CELL_SIZE + CELL_SIZE / 2 + wobbleY
-      })`}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
+      transform={`translate(${position.x * CELL_SIZE + CELL_SIZE / 2}, ${position.y * CELL_SIZE + CELL_SIZE / 2})`}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
       style={{ cursor: "pointer" }}
+      className={isSleeping ? "" : "animate-pulse"}
     >
-      <ellipse
-        cx={0}
-        cy={4}
-        rx={16}
-        ry={6}
-        fill="rgba(0,0,0,0.2)"
-        opacity={isSleeping ? 0.3 : 0.5}
-      />
-
-      <circle
-        cx={0}
-        cy={0}
-        r={18}
-        fill={c.base}
+      <ellipse cx={0} cy={4} rx={16} ry={6} fill="rgba(0,0,0,0.2)" opacity={isSleeping ? 0.3 : 0.5} />
+      <circle cx={0} cy={0} r={18} fill={c.base}
         stroke={isSelected ? "var(--garden-gold)" : c.rim}
         strokeWidth={isSelected ? 4 : 3}
-        opacity={isSleeping ? 0.5 : 1}
-      />
+        opacity={isSleeping ? 0.5 : 1} />
       <circle cx={0} cy={0} r={14} fill="none" stroke={c.rim} strokeWidth={1} opacity={0.5} />
-
-      <text
-        x={0}
-        y={5}
-        textAnchor="middle"
-        fill="var(--garden-paper)"
-        fontSize={16}
-        fontWeight="bold"
-        fontFamily="serif"
-        style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.3)" }}
-      >
+      <text x={0} y={5} textAnchor="middle" fill="var(--garden-paper)" fontSize={16} fontWeight="bold" fontFamily="serif"
+        style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.3)" }}>
         {agent.name.charAt(0).toUpperCase()}
       </text>
-
       {isThinking && (
-        <g>
-          <circle
-            cx={0}
-            cy={-24}
-            r={6}
-            fill="var(--garden-olive)"
-            stroke="var(--garden-olive-dark)"
-            strokeWidth={1}
-            opacity={0.7 + Math.sin(animTime * 3) * 0.3}
-          />
-          <text x={0} y={-21} textAnchor="middle" fill="var(--garden-paper)" fontSize={8}>
-            ?
-          </text>
+        <g className="animate-pulse">
+          <circle cx={0} cy={-24} r={6} fill="var(--garden-olive)" stroke="var(--garden-olive-dark)" strokeWidth={1} />
+          <text x={0} y={-21} textAnchor="middle" fill="var(--garden-paper)" fontSize={8}>?</text>
         </g>
       )}
-
       {isSleeping && (
-        <text
-          x={14}
-          y={-10}
-          fontSize={12}
-          fill="var(--garden-ink-light)"
-          fontStyle="italic"
-          fontFamily="cursive"
-          opacity={0.5 + Math.sin(animTime * 0.5) * 0.3}
-        >
+        <text x={14} y={-10} fontSize={12} fill="var(--garden-ink-light)" fontStyle="italic" fontFamily="cursive" className="animate-pulse">
           zzz
         </text>
       )}
@@ -271,46 +146,19 @@ function TabletopToken({
   );
 }
 
-function TabletopSign({
-  sign,
-  onClick,
-  isSelected,
-}: {
-  sign: Sign;
-  onClick: () => void;
-  isSelected: boolean;
-}) {
+function TabletopSign({ sign, onClick, isSelected }: { sign: Sign; onClick: () => void; isSelected: boolean }) {
   return (
     <g
-      transform={`translate(${sign.x * CELL_SIZE + CELL_SIZE / 2}, ${
-        sign.y * CELL_SIZE + CELL_SIZE / 2
-      })`}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
+      transform={`translate(${sign.x * CELL_SIZE + CELL_SIZE / 2}, ${sign.y * CELL_SIZE + CELL_SIZE / 2})`}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
       style={{ cursor: "pointer" }}
     >
-      <rect
-        x={-10}
-        y={-6}
-        width={20}
-        height={12}
-        rx={2}
-        fill="var(--garden-wood)"
+      <rect x={-10} y={-6} width={20} height={12} rx={2} fill="var(--garden-wood)"
         stroke={isSelected ? "var(--garden-gold)" : "var(--garden-wood-dark)"}
         strokeWidth={isSelected ? 2 : 1}
-        style={{ filter: "drop-shadow(1px 2px 2px rgba(0,0,0,0.3))" }}
-      />
+        style={{ filter: "drop-shadow(1px 2px 2px rgba(0,0,0,0.3))" }} />
       <rect x={-1} y={6} width={2} height={8} fill="var(--garden-wood-dark)" />
-      <text
-        x={0}
-        y={2}
-        textAnchor="middle"
-        fill="var(--garden-paper)"
-        fontSize={6}
-        fontFamily="monospace"
-      >
+      <text x={0} y={2} textAnchor="middle" fill="var(--garden-paper)" fontSize={6} fontFamily="monospace">
         {sign.text.slice(0, 3)}
       </text>
     </g>
@@ -332,7 +180,6 @@ export default function TabletopView({
   const [activeAttack, setActiveAttack] = useState<WorldEvent | null>(null);
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart = useRef({ x: 0, y: 0 });
-  const animTime = useSharedAnimationTime();
 
   const gridWidth = world.grid.width * CELL_SIZE;
   const gridHeight = world.grid.height * CELL_SIZE;
@@ -346,53 +193,32 @@ export default function TabletopView({
     }
   }, [animState, world.events, activeAttack]);
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * delta));
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * delta));
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    setPan({ x: mouseX - ((mouseX - pan.x) / zoom) * newZoom, y: mouseY - ((mouseY - pan.y) / zoom) * newZoom });
+    setZoom(newZoom);
+  }, [zoom, pan]);
 
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    setIsDragging(true);
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    panStart.current = { x: pan.x, y: pan.y };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [pan]);
 
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const newPanX = mouseX - ((mouseX - pan.x) / zoom) * newZoom;
-      const newPanY = mouseY - ((mouseY - pan.y) / zoom) * newZoom;
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging) return;
+    setPan({ x: panStart.current.x + (e.clientX - dragStart.current.x), y: panStart.current.y + (e.clientY - dragStart.current.y) });
+  }, [isDragging]);
 
-      setZoom(newZoom);
-      setPan({ x: newPanX, y: newPanY });
-    },
-    [zoom, pan]
-  );
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      setIsDragging(true);
-      dragStart.current = { x: e.clientX, y: e.clientY };
-      panStart.current = { x: pan.x, y: pan.y };
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    },
-    [pan]
-  );
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!isDragging) return;
-      const dx = e.clientX - dragStart.current.x;
-      const dy = e.clientY - dragStart.current.y;
-      setPan({
-        x: panStart.current.x + dx,
-        y: panStart.current.y + dy,
-      });
-    },
-    [isDragging]
-  );
-
-  const handlePointerUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
+  const handlePointerUp = useCallback(() => setIsDragging(false), []);
 
   return (
     <div
@@ -404,109 +230,38 @@ export default function TabletopView({
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
       style={{
-        background: `
-          radial-gradient(ellipse at center, #5c4a32 0%, #3d3228 100%),
-          url("data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.02' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.15'/%3E%3C/svg%3E")
-        `,
+        background: "radial-gradient(ellipse at center, #5c4a32 0%, #3d3228 100%)",
       }}
     >
-      <svg
-        width="100%"
-        height="100%"
-        style={{
-          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-          transformOrigin: "0 0",
-        }}
-      >
-        <defs>
-          <filter id="wood-texture">
-            <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" result="noise" />
-            <feDiffuseLighting in="noise" lightingColor="#8b6f47" surfaceScale="2">
-              <feDistantLight azimuth="45" elevation="60" />
-            </feDiffuseLighting>
-          </filter>
-          <pattern id="wood-grain" patternUnits="userSpaceOnUse" width="200" height="200">
-            <rect width="200" height="200" fill="#6b5a3a" />
-            <rect width="200" height="200" filter="url(#wood-texture)" opacity="0.3" />
-          </pattern>
-        </defs>
-
-        <rect
-          x={-20}
-          y={-20}
-          width={gridWidth + 40}
-          height={gridHeight + 40}
-          rx={8}
-          fill="url(#wood-grain)"
-          stroke="#3d3228"
-          strokeWidth={4}
-        />
-
-        <rect
-          x={0}
-          y={0}
-          width={gridWidth}
-          height={gridHeight}
-          fill="var(--garden-felt)"
-          stroke="#2a4a2a"
-          strokeWidth={2}
-        />
+      <svg width="100%" height="100%" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}>
+        <rect x={-20} y={-20} width={gridWidth + 40} height={gridHeight + 40} rx={8} fill="#6b5a3a" stroke="#3d3228" strokeWidth={4} />
+        <rect x={0} y={0} width={gridWidth} height={gridHeight} fill="var(--garden-felt)" stroke="#2a4a2a" strokeWidth={2} />
 
         {Array.from({ length: world.grid.width + 1 }, (_, x) => (
-          <line
-            key={`v${x}`}
-            x1={x * CELL_SIZE}
-            y1={0}
-            x2={x * CELL_SIZE}
-            y2={gridHeight}
-            stroke="#2a4a2a"
-            strokeWidth={0.5}
-            opacity={0.3}
-          />
+          <line key={`v${x}`} x1={x * CELL_SIZE} y1={0} x2={x * CELL_SIZE} y2={gridHeight} stroke="#2a4a2a" strokeWidth={0.5} opacity={0.3} />
         ))}
         {Array.from({ length: world.grid.height + 1 }, (_, y) => (
-          <line
-            key={`h${y}`}
-            x1={0}
-            y1={y * CELL_SIZE}
-            x2={gridWidth}
-            y2={y * CELL_SIZE}
-            stroke="#2a4a2a"
-            strokeWidth={0.5}
-            opacity={0.3}
-          />
+          <line key={`h${y}`} x1={0} y1={y * CELL_SIZE} x2={gridWidth} y2={y * CELL_SIZE} stroke="#2a4a2a" strokeWidth={0.5} opacity={0.3} />
         ))}
 
         <g>
           {world.signs.map((sign) => (
-            <TabletopSign
-              key={sign.id}
-              sign={sign}
-              onClick={() => onSelectSign(sign)}
-              isSelected={selectedSign?.id === sign.id}
-            />
+            <TabletopSign key={sign.id} sign={sign} onClick={() => onSelectSign(sign)} isSelected={selectedSign?.id === sign.id} />
           ))}
         </g>
 
         <g>
           {world.agents.map((agent) => {
-            const pos = animState.agentPositions.get(agent.id) || {
-              x: agent.x,
-              y: agent.y,
-            };
-            const isThinking = animState.thinkingAgents.has(agent.id);
-            const isSleeping = agent.status === "sleeping";
-
+            const pos = animState.agentPositions.get(agent.id) || { x: agent.x, y: agent.y };
             return (
               <TabletopToken
                 key={agent.id}
                 agent={agent}
                 position={pos}
-                isThinking={isThinking}
-                isSleeping={isSleeping}
+                isThinking={animState.thinkingAgents.has(agent.id)}
+                isSleeping={agent.status === "sleeping"}
                 onClick={() => onSelectAgent(agent)}
                 isSelected={selectedAgent?.id === agent.id}
-                animTime={animTime}
               />
             );
           })}
@@ -514,26 +269,14 @@ export default function TabletopView({
       </svg>
 
       {activeAttack && (
-        <DiceRoll
-          attacker={activeAttack.agentName || activeAttack.agentId}
-          defender={String(activeAttack.data.targetName || "Unknown")}
-          onComplete={() => setActiveAttack(null)}
-        />
+        <DiceRoll attacker={activeAttack.agentName || activeAttack.agentId} defender={String(activeAttack.data.targetName || "Unknown")} onComplete={() => setActiveAttack(null)} />
       )}
 
       <div className="absolute bottom-4 left-4 flex gap-2">
-        <button
-          onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.2))}
-          className="w-8 h-8 bg-[var(--garden-wood)] border border-[var(--garden-wood-dark)] rounded text-[var(--garden-paper)] hover:bg-[var(--garden-wood-dark)] transition-colors shadow"
-        >
-          +
-        </button>
-        <button
-          onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.2))}
-          className="w-8 h-8 bg-[var(--garden-wood)] border border-[var(--garden-wood-dark)] rounded text-[var(--garden-paper)] hover:bg-[var(--garden-wood-dark)] transition-colors shadow"
-        >
-          −
-        </button>
+        <button onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.2))}
+          className="w-8 h-8 bg-[var(--garden-wood)] border border-[var(--garden-wood-dark)] rounded text-[var(--garden-paper)] hover:bg-[var(--garden-wood-dark)] shadow">+</button>
+        <button onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.2))}
+          className="w-8 h-8 bg-[var(--garden-wood)] border border-[var(--garden-wood-dark)] rounded text-[var(--garden-paper)] hover:bg-[var(--garden-wood-dark)] shadow">−</button>
       </div>
     </div>
   );
