@@ -1,16 +1,10 @@
 "use client";
 
-import { Suspense, lazy, useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, lazy, Suspense, type ComponentType } from "react";
 import Link from "next/link";
 import { useWorld, useAnimationState } from "@/lib/use-world";
 import type { ViewMode, Agent, Sign, WorldState, AnimationState } from "@/lib/world-types";
 import { VIEW_LABELS } from "@/lib/world-types";
-
-const JournalView = lazy(() => import("./views/JournalView"));
-const ThreeView = lazy(() => import("./views/ThreeView"));
-const TabletopView = lazy(() => import("./views/TabletopView"));
-const NightView = lazy(() => import("./views/NightView"));
-const TheaterView = lazy(() => import("./views/TheaterView"));
 
 export interface ViewProps {
   world: WorldState;
@@ -22,6 +16,8 @@ export interface ViewProps {
   followedAgentId: string | null;
   onFollowAgent: (id: string | null) => void;
 }
+
+type LazyView = ComponentType<ViewProps>;
 
 function ViewToggle({
   current,
@@ -49,72 +45,6 @@ function ViewToggle({
       ))}
     </div>
   );
-}
-
-function Ticker({ world, animState }: { world: WorldState; animState: AnimationState }) {
-  const events = world.events;
-  const currentEvent = events[animState.currentEventIndex];
-  
-  if (!currentEvent) {
-    return (
-      <div className="text-xs text-[var(--garden-ink-light)] italic font-serif">
-        The garden rests. Tick {world.tick}.
-      </div>
-    );
-  }
-
-  const agentName = currentEvent.agentName || currentEvent.agentId;
-
-  switch (currentEvent.type) {
-    case "move":
-      return (
-        <div className="text-xs text-[var(--garden-ink)] font-serif">
-          <span className="font-medium">{agentName}</span> wanders{" "}
-          {String(currentEvent.data.direction || "through the garden")}.
-        </div>
-      );
-    case "attack":
-      return (
-        <div className="text-xs text-[var(--garden-terracotta)] font-serif">
-          <span className="font-medium">{agentName}</span> strikes at{" "}
-          <span className="font-medium">{String(currentEvent.data.targetName || "a shadow")}</span>.
-        </div>
-      );
-    case "build":
-      return (
-        <div className="text-xs text-[var(--garden-olive)] font-serif">
-          <span className="font-medium">{agentName}</span> plants a sign:{" "}
-          <span className="italic">&ldquo;{String(currentEvent.data.text || "").slice(0, 10)}&rdquo;</span>
-        </div>
-      );
-    case "signal": {
-      const message = String(currentEvent.data.message || "");
-      return (
-        <div className="text-xs text-[var(--garden-gold)] font-serif">
-          <span className="font-medium">{agentName}</span> signals:{" "}
-          <span className="italic">{message}</span>
-        </div>
-      );
-    }
-    case "rest":
-      return (
-        <div className="text-xs text-[var(--garden-ink-light)] font-serif italic">
-          <span className="font-medium">{agentName}</span> closes their eyes.
-        </div>
-      );
-    case "wake":
-      return (
-        <div className="text-xs text-[var(--garden-ink)] font-serif">
-          <span className="font-medium">{agentName}</span> stirs awake.
-        </div>
-      );
-    default:
-      return (
-        <div className="text-xs text-[var(--garden-ink-light)] font-serif italic">
-          Something moves in the garden.
-        </div>
-      );
-  }
 }
 
 function AgentModal({
@@ -153,7 +83,7 @@ function AgentModal({
   const displayHealth = Math.round(displayAgent.health);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40" onClick={onClose}>
       <div
         className="bg-[var(--garden-paper)] border border-[var(--garden-dust)] rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
@@ -232,34 +162,78 @@ function AgentModal({
   );
 }
 
-function SignModal({
-  sign,
-  onClose,
+function TextOnlyView({
+  world,
+  onSelectAgent,
 }: {
-  sign: Sign;
-  onClose: () => void;
+  world: WorldState;
+  onSelectAgent: (agent: Agent) => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40" onClick={onClose}>
-      <div
-        className="bg-[var(--garden-paper)] border border-[var(--garden-dust)] rounded-lg shadow-xl max-w-sm w-full"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-4">
-          <div className="text-center mb-4">
-            <div className="inline-block bg-[var(--garden-wood)] text-[var(--garden-paper)] px-3 py-1 rounded text-xs font-medium mb-2">
-              Sign at ({sign.x}, {sign.y})
-            </div>
-          </div>
-          <p className="text-lg font-serif text-[var(--garden-ink)] text-center leading-relaxed mb-4">
-            &ldquo;{sign.text}&rdquo;
-          </p>
-          <div className="flex justify-between text-xs text-[var(--garden-ink-light)]">
-            <span>— {sign.author}</span>
-            <span>tick {sign.tick}</span>
-          </div>
+    <div className="p-6 font-serif text-[var(--garden-ink)]">
+      <div className="mb-6">
+        <div className="text-lg font-bold mb-2">World State</div>
+        <div className="text-sm text-[var(--garden-ink-light)]">
+          Tick: {world.tick} | Grid: {(world.grid as {width: number; height: number}).width}×{(world.grid as {width: number; height: number}).height}
         </div>
       </div>
+
+      <div className="mb-6">
+        <div className="text-md font-bold mb-3">Agents ({world.agents.length})</div>
+        {world.agents.length === 0 ? (
+          <div className="text-sm text-[var(--garden-ink-light)] italic">No agents present.</div>
+        ) : (
+          <div className="space-y-2">
+            {world.agents.map((agent) => (
+              <div
+                key={agent.id}
+                onClick={() => onSelectAgent(agent)}
+                className="p-3 bg-[var(--garden-paper-dark)] rounded border border-[var(--garden-dust)] cursor-pointer hover:border-[var(--garden-olive)] transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-bold">{agent.symbol} {agent.name}</div>
+                  <div className="text-xs text-[var(--garden-ink-light)] capitalize">{agent.status}</div>
+                </div>
+                <div className="text-xs text-[var(--garden-ink-light)] mt-1">
+                  Position: ({agent.x}, {agent.y}) | Energy: {Math.round(agent.energy)} | Health: {Math.round(agent.health)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {world.signs.length > 0 && (
+        <div className="mb-6">
+          <div className="text-md font-bold mb-3">Signs ({world.signs.length})</div>
+          <div className="space-y-2">
+            {world.signs.map((sign) => (
+              <div
+                key={sign.id}
+                className="p-3 bg-[var(--garden-paper-dark)] rounded border border-[var(--garden-dust)]"
+              >
+                <div className="text-sm">&ldquo;{sign.text}&rdquo;</div>
+                <div className="text-xs text-[var(--garden-ink-light)] mt-1">
+                  by {sign.author} at ({sign.x}, {sign.y})
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {world.events.length > 0 && (
+        <div>
+          <div className="text-md font-bold mb-3">Recent Events ({world.events.length})</div>
+          <div className="space-y-1 text-sm text-[var(--garden-ink-light)]">
+            {world.events.slice(-5).map((event, i) => (
+              <div key={i}>
+                [{event.type}] {event.agentName || event.agentId}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -268,22 +242,8 @@ function LoadingSpinner() {
   return (
     <div className="flex items-center justify-center h-full">
       <div className="text-[var(--garden-ink-light)] font-serif italic">
-        Opening the field journal...
+        Loading view...
       </div>
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <div className="w-16 h-16 mb-4 rounded-full bg-[var(--garden-paper-dark)] flex items-center justify-center">
-        <span className="text-2xl">🌱</span>
-      </div>
-      <h2 className="text-lg font-bold text-[var(--garden-ink)] mb-2">The Garden Awaits</h2>
-      <p className="text-sm text-[var(--garden-ink-light)] font-serif max-w-xs">
-        No world data yet. The simulation may be starting, or the garden is being prepared.
-      </p>
     </div>
   );
 }
@@ -297,6 +257,8 @@ export function WorldCanvas() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [selectedSign, setSelectedSign] = useState<Sign | null>(null);
   const [followedAgentId, setFollowedAgentId] = useState<string | null>(null);
+  const [loadedView, setLoadedView] = useState<LazyView | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
 
   const handleSelectAgent = useCallback((agent: Agent | null) => {
     setSelectedAgent(agent);
@@ -312,6 +274,46 @@ export function WorldCanvas() {
     setFollowedAgentId(id);
   }, []);
 
+  const handleViewChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    if (mode === "journal") {
+      setLoadedView(null);
+      return;
+    }
+
+    setViewLoading(true);
+    let importPromise: Promise<{ default: LazyView }>;
+    
+    switch (mode) {
+      case "three":
+        importPromise = import("./views/ThreeView");
+        break;
+      case "tabletop":
+        importPromise = import("./views/TabletopView");
+        break;
+      case "night":
+        importPromise = import("./views/NightView");
+        break;
+      case "theater":
+        importPromise = import("./views/TheaterView");
+        break;
+      default:
+        setViewLoading(false);
+        return;
+    }
+
+    importPromise
+      .then((mod) => {
+        setLoadedView(() => mod.default);
+      })
+      .catch((err) => {
+        console.error("Failed to load view:", err);
+      })
+      .finally(() => {
+        setViewLoading(false);
+      });
+  }, []);
+
   const viewProps: ViewProps = {
     world,
     animState,
@@ -323,94 +325,51 @@ export function WorldCanvas() {
     onFollowAgent: handleFollowAgent,
   };
 
-  const isNightView = viewMode === "night";
-  const bgClass = isNightView
-    ? "bg-[var(--garden-night-bg)]"
-    : "bg-[var(--garden-paper)]";
+  const LoadedViewComponent = loadedView;
 
   return (
-    <main className={`min-h-screen ${bgClass} flex flex-col`}>
-      <header
-        className={`sticky top-0 z-40 border-b ${
-          isNightView
-            ? "bg-[var(--garden-night-bg)] border-[var(--garden-coal)]"
-            : "bg-[var(--garden-paper)] border-[var(--garden-dust)]"
-        }`}
-      >
+    <main className="min-h-screen bg-[var(--garden-paper)] flex flex-col">
+      <header className="sticky top-0 z-40 border-b bg-[var(--garden-paper)] border-[var(--garden-dust)]">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-4">
             <Link
               href="/"
-              className={`text-xs ${
-                isNightView
-                  ? "text-[var(--garden-dust)] hover:text-[var(--garden-paper)]"
-                  : "text-[var(--garden-ink-light)] hover:text-[var(--garden-ink)]"
-              } transition-colors flex items-center gap-1`}
+              className="text-xs text-[var(--garden-ink-light)] hover:text-[var(--garden-ink)] transition-colors flex items-center gap-1"
             >
               <span>←</span>
               <span>Back</span>
             </Link>
-            <div
-              className={`h-4 w-px ${
-                isNightView ? "bg-[var(--garden-coal)]" : "bg-[var(--garden-dust)]"
-              }`}
-            />
-            <h1
-              className={`text-sm font-bold ${
-                isNightView ? "text-[var(--garden-paper)]" : "text-[var(--garden-ink)]"
-              }`}
-            >
+            <div className="h-4 w-px bg-[var(--garden-dust)]" />
+            <h1 className="text-sm font-bold text-[var(--garden-ink)]">
               The Garden
             </h1>
-            <span
-              className={`text-xs ${
-                isNightView ? "text-[var(--garden-dust)]" : "text-[var(--garden-ink-light)]"
-              } font-serif italic hidden sm:inline`}
-            >
+            <span className="text-xs text-[var(--garden-ink-light)] font-serif italic hidden sm:inline">
               Genesis-001 · tick {world.tick}
             </span>
           </div>
 
-          <ViewToggle current={viewMode} onChange={setViewMode} />
-        </div>
-
-        <div
-          className={`px-4 py-2 border-t ${
-            isNightView
-              ? "border-[var(--garden-coal)] bg-[var(--garden-night-bg)]/50"
-              : "border-[var(--garden-dust-light)] bg-[var(--garden-paper-dark)]/50"
-          }`}
-        >
-          <Ticker world={world} animState={animState} />
+          <ViewToggle current={viewMode} onChange={handleViewChange} />
         </div>
       </header>
 
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative overflow-auto">
         {loading ? (
-          <LoadingSpinner />
+          <div className="p-6 text-[var(--garden-ink-light)] font-serif italic">Loading world data...</div>
         ) : error ? (
-          <div className="flex items-center justify-center h-full text-[var(--garden-terracotta)]">
-            {error}
-          </div>
-        ) : world.agents.length === 0 && world.signs.length === 0 ? (
-          <EmptyState />
+          <div className="p-6 text-[var(--garden-terracotta)]">{error}</div>
+        ) : viewMode === "journal" ? (
+          <TextOnlyView world={world} onSelectAgent={handleSelectAgent} />
+        ) : viewLoading ? (
+          <LoadingSpinner />
+        ) : LoadedViewComponent ? (
+          <LoadedViewComponent {...viewProps} />
         ) : (
-          <Suspense fallback={<LoadingSpinner />}>
-            {viewMode === "journal" && <JournalView {...viewProps} />}
-            {viewMode === "three" && <ThreeView {...viewProps} />}
-            {viewMode === "tabletop" && <TabletopView {...viewProps} />}
-            {viewMode === "night" && <NightView {...viewProps} />}
-            {viewMode === "theater" && <TheaterView {...viewProps} />}
-          </Suspense>
+          <LoadingSpinner />
         )}
       </div>
 
       {selectedAgent && (
         <AgentModal agent={selectedAgent} onClose={() => setSelectedAgent(null)} />
-      )}
-
-      {selectedSign && (
-        <SignModal sign={selectedSign} onClose={() => setSelectedSign(null)} />
       )}
     </main>
   );

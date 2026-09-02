@@ -1,10 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { WorldState, AnimationState, WorldEvent } from "./world-types";
+import type { WorldState, AnimationState, WorldEvent, GridShape, Agent, Sign } from "./world-types";
 import { EMPTY_WORLD } from "./world-types";
 
 const POLL_INTERVAL = 10_000;
+
+function normalizeGrid(grid: GridShape): { width: number; height: number } {
+  if (Array.isArray(grid)) {
+    return { width: grid.length, height: grid[0]?.length ?? 0 };
+  }
+  return { width: grid.width, height: grid.height };
+}
 
 export function useWorld() {
   const [world, setWorld] = useState<WorldState>(EMPTY_WORLD);
@@ -17,7 +24,23 @@ export function useWorld() {
     try {
       const res = await fetch("/api/world");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: WorldState = await res.json();
+      const raw = await res.json() as {
+        tick: number;
+        grid: GridShape;
+        agents?: Agent[];
+        signs?: Sign[];
+        events?: WorldEvent[];
+        timestamp: string;
+      };
+      
+      const data: WorldState = {
+        tick: raw.tick,
+        grid: normalizeGrid(raw.grid),
+        agents: raw.agents || [],
+        signs: raw.signs || [],
+        events: raw.events || [],
+        timestamp: raw.timestamp,
+      };
       
       if (data.tick !== lastFetchedTick) {
         pendingEventsRef.current = data.events;

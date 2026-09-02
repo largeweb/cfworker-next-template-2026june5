@@ -35,7 +35,7 @@
 		}
 	],
 	"vars": {
-		"SITE_VERSION": "2026.09.02.005"
+		"SITE_VERSION": "2026.09.02.006"
 	},
 	"observability": {
 		"enabled": true
