@@ -33,8 +33,9 @@ function useSharedAnimationTime() {
     let frame: number;
     const animate = () => {
       if (!mountedRef.current) return;
-      setTime((t) => t + 0.02);
       frame = requestAnimationFrame(animate);
+      if (document.hidden) return;
+      setTime((t) => t + 0.02);
     };
     frame = requestAnimationFrame(animate);
     return () => {
@@ -66,6 +67,8 @@ function useFireflies(count: number, width: number, height: number) {
     let frame: number;
     const animate = () => {
       if (!mountedRef.current) return;
+      frame = requestAnimationFrame(animate);
+      if (document.hidden) return;
       setFireflies((prev) =>
         prev.map((f) => {
           let nx = f.x + f.vx;
@@ -89,7 +92,6 @@ function useFireflies(count: number, width: number, height: number) {
           };
         })
       );
-      frame = requestAnimationFrame(animate);
     };
     frame = requestAnimationFrame(animate);
 
