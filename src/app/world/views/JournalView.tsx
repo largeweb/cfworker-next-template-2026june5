@@ -14,6 +14,56 @@ interface Position {
   y: number;
 }
 
+function useSharedAnimationTime() {
+  const [time, setTime] = useState(0);
+  const mountedRef = useRef(true);
+  
+  useEffect(() => {
+    mountedRef.current = true;
+    let frame: number;
+    const animate = () => {
+      if (!mountedRef.current) return;
+      setTime((t) => (t + 0.015) % (Math.PI * 2));
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => {
+      mountedRef.current = false;
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  
+  return time;
+}
+
+const AGENT_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+  clay: {
+    bg: "var(--garden-terracotta)",
+    border: "var(--garden-terracotta-dark)",
+    text: "var(--garden-paper)",
+  },
+  thorn: {
+    bg: "var(--garden-thorn)",
+    border: "var(--garden-coal)",
+    text: "var(--garden-dust)",
+  },
+  reed: {
+    bg: "var(--garden-reed)",
+    border: "var(--garden-dust)",
+    text: "var(--garden-ink)",
+  },
+  cole: {
+    bg: "var(--garden-coal)",
+    border: "var(--garden-thorn)",
+    text: "var(--garden-dust)",
+  },
+  sol: {
+    bg: "var(--garden-gold)",
+    border: "var(--garden-wood)",
+    text: "var(--garden-ink)",
+  },
+};
+
 function AgentToken({
   agent,
   position,
@@ -21,6 +71,7 @@ function AgentToken({
   isSleeping,
   onClick,
   isSelected,
+  animTime,
 }: {
   agent: Agent;
   position: Position;
@@ -28,52 +79,12 @@ function AgentToken({
   isSleeping: boolean;
   onClick: () => void;
   isSelected: boolean;
+  animTime: number;
 }) {
   const symbolType = getAgentSymbolType(agent.symbol);
-  const [breathPhase, setBreathPhase] = useState(0);
-
-  useEffect(() => {
-    let frame: number;
-    const animate = () => {
-      setBreathPhase((p) => (p + 0.015) % (Math.PI * 2));
-      frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  const breathScale = 1 + Math.sin(breathPhase) * 0.02;
-  const idleShift = Math.sin(breathPhase * 0.7) * 1;
-
-  const colors: Record<string, { bg: string; border: string; text: string }> = {
-    clay: {
-      bg: "var(--garden-terracotta)",
-      border: "var(--garden-terracotta-dark)",
-      text: "var(--garden-paper)",
-    },
-    thorn: {
-      bg: "var(--garden-thorn)",
-      border: "var(--garden-coal)",
-      text: "var(--garden-dust)",
-    },
-    reed: {
-      bg: "var(--garden-reed)",
-      border: "var(--garden-dust)",
-      text: "var(--garden-ink)",
-    },
-    cole: {
-      bg: "var(--garden-coal)",
-      border: "var(--garden-thorn)",
-      text: "var(--garden-dust)",
-    },
-    sol: {
-      bg: "var(--garden-gold)",
-      border: "var(--garden-wood)",
-      text: "var(--garden-ink)",
-    },
-  };
-
-  const c = colors[symbolType];
+  const c = AGENT_COLORS[symbolType];
+  const breathScale = 1 + Math.sin(animTime) * 0.02;
+  const idleShift = Math.sin(animTime * 0.7) * 1;
 
   return (
     <g
@@ -118,21 +129,21 @@ function AgentToken({
             cy={-14}
             r={4}
             fill="var(--garden-olive)"
-            opacity={0.7 + Math.sin(breathPhase * 3) * 0.3}
+            opacity={0.7 + Math.sin(animTime * 3) * 0.3}
           />
           <circle
             cx={18}
             cy={-20}
             r={2.5}
             fill="var(--garden-olive)"
-            opacity={0.5 + Math.sin(breathPhase * 3 + 0.5) * 0.3}
+            opacity={0.5 + Math.sin(animTime * 3 + 0.5) * 0.3}
           />
           <circle
             cx={20}
             cy={-26}
             r={1.5}
             fill="var(--garden-olive)"
-            opacity={0.3 + Math.sin(breathPhase * 3 + 1) * 0.3}
+            opacity={0.3 + Math.sin(animTime * 3 + 1) * 0.3}
           />
         </g>
       )}
@@ -145,7 +156,7 @@ function AgentToken({
           fill="var(--garden-ink-light)"
           fontStyle="italic"
           fontFamily="cursive"
-          opacity={0.5 + Math.sin(breathPhase * 0.5) * 0.3}
+          opacity={0.5 + Math.sin(animTime * 0.5) * 0.3}
         >
           z
         </text>
@@ -222,11 +233,30 @@ export default function JournalView({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart = useRef({ x: 0, y: 0 });
+  const animTime = useSharedAnimationTime();
 
   const gridWidth = world.grid.width * CELL_SIZE;
   const gridHeight = world.grid.height * CELL_SIZE;
+
+  const centerGrid = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setPan({
+      x: (rect.width - gridWidth) / 2,
+      y: (rect.height - gridHeight) / 2,
+    });
+    setZoom(1);
+  }, [gridWidth, gridHeight]);
+
+  useEffect(() => {
+    if (!initialized && containerRef.current) {
+      centerGrid();
+      setInitialized(true);
+    }
+  }, [initialized, centerGrid]);
 
   useEffect(() => {
     if (followedAgentId) {
@@ -407,6 +437,7 @@ export default function JournalView({
                 isSleeping={isSleeping}
                 onClick={() => onSelectAgent(agent)}
                 isSelected={selectedAgent?.id === agent.id}
+                animTime={animTime}
               />
             );
           })}
@@ -427,10 +458,7 @@ export default function JournalView({
           −
         </button>
         <button
-          onClick={() => {
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
-          }}
+          onClick={centerGrid}
           className="px-3 h-8 bg-[var(--garden-paper-dark)] border border-[var(--garden-dust)] rounded text-xs text-[var(--garden-ink)] hover:bg-[var(--garden-dust-light)] transition-colors"
         >
           Reset
