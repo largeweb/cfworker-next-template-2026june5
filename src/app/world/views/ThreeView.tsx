@@ -45,7 +45,7 @@ function GardenToken({
       transform={`translate(${position.x * CELL_SIZE + CELL_SIZE / 2}, ${position.y * CELL_SIZE + CELL_SIZE / 2})`}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       style={{ cursor: "pointer" }}
-      className={isSleeping ? "" : "animate-pulse"}
+      className=""
     >
       <ellipse cx={0} cy={10} rx={8} ry={3} fill="rgba(0,0,0,0.15)" />
       <rect x={-7} y={-10} width={14} height={20} rx={2} fill={color}
@@ -54,7 +54,7 @@ function GardenToken({
         {agent.name.charAt(0).toUpperCase()}
       </text>
       {isThinking && (
-        <g className="animate-pulse">
+        <g>
           <circle cx={10} cy={-12} r={4} fill="#6b8e4a" />
         </g>
       )}

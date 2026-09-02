@@ -119,7 +119,7 @@ function TabletopToken({
       transform={`translate(${position.x * CELL_SIZE + CELL_SIZE / 2}, ${position.y * CELL_SIZE + CELL_SIZE / 2})`}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       style={{ cursor: "pointer" }}
-      className={isSleeping ? "" : "animate-pulse"}
+      className=""
     >
       <ellipse cx={0} cy={4} rx={16} ry={6} fill="rgba(0,0,0,0.2)" opacity={isSleeping ? 0.3 : 0.5} />
       <circle cx={0} cy={0} r={18} fill={c.base}
@@ -132,13 +132,13 @@ function TabletopToken({
         {agent.name.charAt(0).toUpperCase()}
       </text>
       {isThinking && (
-        <g className="animate-pulse">
+        <g>
           <circle cx={0} cy={-24} r={6} fill="var(--garden-olive)" stroke="var(--garden-olive-dark)" strokeWidth={1} />
           <text x={0} y={-21} textAnchor="middle" fill="var(--garden-paper)" fontSize={8}>?</text>
         </g>
       )}
       {isSleeping && (
-        <text x={14} y={-10} fontSize={12} fill="var(--garden-ink-light)" fontStyle="italic" fontFamily="cursive" className="animate-pulse">
+        <text x={14} y={-10} fontSize={12} fill="var(--garden-ink-light)" fontStyle="italic" fontFamily="cursive">
           zzz
         </text>
       )}

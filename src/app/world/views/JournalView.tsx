@@ -45,7 +45,7 @@ function AgentToken({
       transform={`translate(${position.x * CELL_SIZE + CELL_SIZE / 2}, ${position.y * CELL_SIZE + CELL_SIZE / 2})`}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       style={{ cursor: "pointer" }}
-      className={isSleeping ? "" : "animate-pulse"}
+      className=""
     >
       <rect x={-16} y={-16} width={32} height={32} rx={4} fill={c.bg}
         stroke={isSelected ? "var(--garden-olive)" : c.border}
@@ -54,14 +54,14 @@ function AgentToken({
         {agent.name.charAt(0).toUpperCase()}
       </text>
       {isThinking && (
-        <g className="animate-pulse">
+        <g>
           <circle cx={14} cy={-14} r={4} fill="var(--garden-olive)" />
           <circle cx={18} cy={-20} r={2.5} fill="var(--garden-olive)" opacity={0.7} />
           <circle cx={20} cy={-26} r={1.5} fill="var(--garden-olive)" opacity={0.5} />
         </g>
       )}
       {isSleeping && (
-        <text x={16} y={-12} fontSize={10} fill="var(--garden-ink-light)" fontStyle="italic" fontFamily="cursive" className="animate-pulse">z</text>
+        <text x={16} y={-12} fontSize={10} fill="var(--garden-ink-light)" fontStyle="italic" fontFamily="cursive">z</text>
       )}
     </g>
   );
