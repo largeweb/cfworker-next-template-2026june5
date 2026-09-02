@@ -333,9 +333,9 @@ export function WorldCanvas() {
       <header
         className={`sticky top-0 z-40 border-b ${
           isNightView
-            ? "bg-[var(--garden-night-bg)]/95 border-[var(--garden-coal)]"
-            : "bg-[var(--garden-paper)]/95 border-[var(--garden-dust)]"
-        } backdrop-blur-sm`}
+            ? "bg-[var(--garden-night-bg)] border-[var(--garden-coal)]"
+            : "bg-[var(--garden-paper)] border-[var(--garden-dust)]"
+        }`}
       >
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-4">

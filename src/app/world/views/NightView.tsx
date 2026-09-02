@@ -46,21 +46,20 @@ function NightToken({
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       style={{ cursor: "pointer" }}
     >
-      <circle cx={0} cy={0} r={24} fill={c.glow} opacity={isSleeping ? 0.2 : 0.4} className="animate-pulse" style={{ filter: "blur(8px)" }} />
+      <circle cx={0} cy={0} r={20} fill={c.glow} opacity={isSleeping ? 0.15 : 0.3} />
       <rect x={-14} y={-14} width={28} height={28} rx={4} fill={c.core}
         stroke={isSelected ? "var(--garden-gold)" : "transparent"} strokeWidth={2} opacity={isSleeping ? 0.5 : 0.9} />
       <text x={0} y={5} textAnchor="middle" fill="var(--garden-paper)" fontSize={14} fontWeight="bold" fontFamily="serif" opacity={isSleeping ? 0.4 : 0.9}>
         {agent.name.charAt(0).toUpperCase()}
       </text>
       {isThinking && (
-        <g className="animate-pulse">
+        <g>
           <circle cx={14} cy={-14} r={3} fill="var(--garden-ember)" />
           <circle cx={18} cy={-20} r={2} fill="var(--garden-ember)" opacity={0.7} />
-          <circle cx={20} cy={-25} r={1.5} fill="var(--garden-ember)" opacity={0.4} />
         </g>
       )}
       {isSleeping && (
-        <text x={14} y={-10} fontSize={10} fill="var(--garden-dust)" fontStyle="italic" fontFamily="cursive" className="animate-pulse">z</text>
+        <text x={14} y={-10} fontSize={10} fill="var(--garden-dust)" fontStyle="italic" fontFamily="cursive">z</text>
       )}
     </g>
   );
@@ -84,23 +83,17 @@ function NightSign({ sign, onClick, isSelected }: { sign: Sign; onClick: () => v
 }
 
 function Fireflies({ width, height }: { width: number; height: number }) {
-  const fireflies = Array.from({ length: 20 }, (_, i) => ({
+  const fireflies = Array.from({ length: 12 }, (_, i) => ({
     id: i,
     x: (i * 137 + 50) % width,
     y: (i * 89 + 30) % height,
-    size: 1 + (i % 3),
-    delay: i * 0.3,
+    size: 1 + (i % 2),
   }));
 
   return (
     <g>
       {fireflies.map((f) => (
-        <g key={f.id}>
-          <circle cx={f.x} cy={f.y} r={f.size * 3} fill="var(--garden-ember)" opacity={0.2}
-            className="animate-pulse" style={{ animationDelay: `${f.delay}s`, filter: "blur(3px)" }} />
-          <circle cx={f.x} cy={f.y} r={f.size} fill="var(--garden-gold)"
-            className="animate-pulse" style={{ animationDelay: `${f.delay}s` }} />
-        </g>
+        <circle key={f.id} cx={f.x} cy={f.y} r={f.size} fill="var(--garden-gold)" opacity={0.6} />
       ))}
     </g>
   );
@@ -162,16 +155,8 @@ export default function NightView({
       onPointerLeave={handlePointerUp}
     >
       <svg width="100%" height="100%" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}>
-        <defs>
-          <radialGradient id="moon-glow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#ffeedd" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="#ffeedd" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-
         <rect x={0} y={0} width={gridWidth} height={gridHeight} fill="var(--garden-night-bg)" />
 
-        <circle cx={gridWidth * 0.8} cy={gridHeight * 0.1} r={60} fill="url(#moon-glow)" />
         <circle cx={gridWidth * 0.8} cy={gridHeight * 0.1} r={15} fill="#ffeedd" opacity={0.8} />
 
         {Array.from({ length: world.grid.width + 1 }, (_, x) => (
