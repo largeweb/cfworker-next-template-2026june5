@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, memo, useMemo } from "react";
-import type { ViewProps } from "../WorldCanvas";
+import type { ViewProps } from "@/lib/world-types";
 import type { Agent, Sign } from "@/lib/world-types";
 import { getAgentSymbolType, getGridDimensions } from "@/lib/world-types";
 
