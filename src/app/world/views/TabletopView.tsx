@@ -1,9 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ViewProps } from "../WorldCanvas";
 import { getAgentSymbolType } from "@/lib/world-types";
 import type { Agent, Sign, WorldEvent } from "@/lib/world-types";
+
+function useSharedAnimationTime() {
+  const [time, setTime] = useState(0);
+  const mountedRef = useRef(true);
+  
+  useEffect(() => {
+    mountedRef.current = true;
+    let frame: number;
+    const animate = () => {
+      if (!mountedRef.current) return;
+      setTime((t) => t + 0.02);
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => {
+      mountedRef.current = false;
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  
+  return time;
+}
 
 const CELL_SIZE = 52;
 const MIN_ZOOM = 0.3;
@@ -140,6 +162,14 @@ function DiceRoll({
   );
 }
 
+const TOKEN_COLORS: Record<string, { base: string; rim: string }> = {
+  clay: { base: "#c4644a", rim: "#a34d38" },
+  thorn: { base: "#4a4540", rim: "#2c2a24" },
+  reed: { base: "#b8b0a0", rim: "#8a8376" },
+  cole: { base: "#3d3835", rim: "#1a1815" },
+  sol: { base: "#d4a54a", rim: "#b8903a" },
+};
+
 function TabletopToken({
   agent,
   position,
@@ -147,6 +177,7 @@ function TabletopToken({
   isSleeping,
   onClick,
   isSelected,
+  animTime,
 }: {
   agent: Agent;
   position: Position;
@@ -154,31 +185,12 @@ function TabletopToken({
   isSleeping: boolean;
   onClick: () => void;
   isSelected: boolean;
+  animTime: number;
 }) {
   const symbolType = getAgentSymbolType(agent.symbol);
-  const [wobble, setWobble] = useState(0);
-
-  useEffect(() => {
-    let frame: number;
-    const animate = () => {
-      setWobble((w) => w + 0.02);
-      frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  const colors: Record<string, { base: string; rim: string }> = {
-    clay: { base: "#c4644a", rim: "#a34d38" },
-    thorn: { base: "#4a4540", rim: "#2c2a24" },
-    reed: { base: "#b8b0a0", rim: "#8a8376" },
-    cole: { base: "#3d3835", rim: "#1a1815" },
-    sol: { base: "#d4a54a", rim: "#b8903a" },
-  };
-
-  const c = colors[symbolType];
-  const wobbleX = Math.sin(wobble) * (isSleeping ? 0 : 1);
-  const wobbleY = Math.cos(wobble * 0.7) * (isSleeping ? 0 : 0.5);
+  const c = TOKEN_COLORS[symbolType];
+  const wobbleX = Math.sin(animTime) * (isSleeping ? 0 : 1);
+  const wobbleY = Math.cos(animTime * 0.7) * (isSleeping ? 0 : 0.5);
 
   return (
     <g
@@ -233,7 +245,7 @@ function TabletopToken({
             fill="var(--garden-olive)"
             stroke="var(--garden-olive-dark)"
             strokeWidth={1}
-            opacity={0.7 + Math.sin(wobble * 3) * 0.3}
+            opacity={0.7 + Math.sin(animTime * 3) * 0.3}
           />
           <text x={0} y={-21} textAnchor="middle" fill="var(--garden-paper)" fontSize={8}>
             ?
@@ -249,7 +261,7 @@ function TabletopToken({
           fill="var(--garden-ink-light)"
           fontStyle="italic"
           fontFamily="cursive"
-          opacity={0.5 + Math.sin(wobble * 0.5) * 0.3}
+          opacity={0.5 + Math.sin(animTime * 0.5) * 0.3}
         >
           zzz
         </text>
@@ -319,6 +331,7 @@ export default function TabletopView({
   const [activeAttack, setActiveAttack] = useState<WorldEvent | null>(null);
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart = useRef({ x: 0, y: 0 });
+  const animTime = useSharedAnimationTime();
 
   const gridWidth = world.grid.width * CELL_SIZE;
   const gridHeight = world.grid.height * CELL_SIZE;
@@ -492,6 +505,7 @@ export default function TabletopView({
                 isSleeping={isSleeping}
                 onClick={() => onSelectAgent(agent)}
                 isSelected={selectedAgent?.id === agent.id}
+                animTime={animTime}
               />
             );
           })}

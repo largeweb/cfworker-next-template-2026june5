@@ -24,10 +24,34 @@ interface Position {
   y: number;
 }
 
+function useSharedAnimationTime() {
+  const [time, setTime] = useState(0);
+  const mountedRef = useRef(true);
+  
+  useEffect(() => {
+    mountedRef.current = true;
+    let frame: number;
+    const animate = () => {
+      if (!mountedRef.current) return;
+      setTime((t) => t + 0.02);
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => {
+      mountedRef.current = false;
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  
+  return time;
+}
+
 function useFireflies(count: number, width: number, height: number) {
   const [fireflies, setFireflies] = useState<Firefly[]>([]);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
     const initial: Firefly[] = Array.from({ length: count }, (_, i) => ({
       id: i,
       x: Math.random() * width,
@@ -41,6 +65,7 @@ function useFireflies(count: number, width: number, height: number) {
 
     let frame: number;
     const animate = () => {
+      if (!mountedRef.current) return;
       setFireflies((prev) =>
         prev.map((f) => {
           let nx = f.x + f.vx;
@@ -68,11 +93,22 @@ function useFireflies(count: number, width: number, height: number) {
     };
     frame = requestAnimationFrame(animate);
 
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      mountedRef.current = false;
+      cancelAnimationFrame(frame);
+    };
   }, [count, width, height]);
 
   return fireflies;
 }
+
+const NIGHT_TOKEN_COLORS: Record<string, { glow: string; core: string }> = {
+  clay: { glow: "#e87c3f", core: "#c4644a" },
+  thorn: { glow: "#6b6560", core: "#4a4540" },
+  reed: { glow: "#d0c8b8", core: "#b8b0a0" },
+  cole: { glow: "#555550", core: "#3d3835" },
+  sol: { glow: "#ffd080", core: "#d4a54a" },
+};
 
 function NightToken({
   agent,
@@ -81,6 +117,7 @@ function NightToken({
   isSleeping,
   onClick,
   isSelected,
+  animTime,
 }: {
   agent: Agent;
   position: Position;
@@ -88,31 +125,12 @@ function NightToken({
   isSleeping: boolean;
   onClick: () => void;
   isSelected: boolean;
+  animTime: number;
 }) {
   const symbolType = getAgentSymbolType(agent.symbol);
-  const [pulse, setPulse] = useState(0);
-
-  useEffect(() => {
-    let frame: number;
-    const animate = () => {
-      setPulse((p) => p + 0.02);
-      frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  const colors: Record<string, { glow: string; core: string }> = {
-    clay: { glow: "#e87c3f", core: "#c4644a" },
-    thorn: { glow: "#6b6560", core: "#4a4540" },
-    reed: { glow: "#d0c8b8", core: "#b8b0a0" },
-    cole: { glow: "#555550", core: "#3d3835" },
-    sol: { glow: "#ffd080", core: "#d4a54a" },
-  };
-
-  const c = colors[symbolType];
-  const glowIntensity = isSleeping ? 0.2 : 0.4 + Math.sin(pulse) * 0.1;
-  const breathOffset = Math.sin(pulse * 0.7) * (isSleeping ? 0.5 : 1);
+  const c = NIGHT_TOKEN_COLORS[symbolType];
+  const glowIntensity = isSleeping ? 0.2 : 0.4 + Math.sin(animTime) * 0.1;
+  const breathOffset = Math.sin(animTime * 0.7) * (isSleeping ? 0.5 : 1);
 
   return (
     <g
@@ -160,7 +178,7 @@ function NightToken({
       </text>
 
       {isThinking && (
-        <g opacity={0.6 + Math.sin(pulse * 2) * 0.2}>
+        <g opacity={0.6 + Math.sin(animTime * 2) * 0.2}>
           <circle cx={14} cy={-14} r={3} fill="var(--garden-ember)" />
           <circle cx={18} cy={-20} r={2} fill="var(--garden-ember)" opacity={0.7} />
           <circle cx={20} cy={-25} r={1.5} fill="var(--garden-ember)" opacity={0.4} />
@@ -175,7 +193,7 @@ function NightToken({
           fill="var(--garden-dust)"
           fontStyle="italic"
           fontFamily="cursive"
-          opacity={0.3 + Math.sin(pulse * 0.3) * 0.2}
+          opacity={0.3 + Math.sin(animTime * 0.3) * 0.2}
         >
           z
         </text>
@@ -188,24 +206,14 @@ function NightSign({
   sign,
   onClick,
   isSelected,
+  animTime,
 }: {
   sign: Sign;
   onClick: () => void;
   isSelected: boolean;
+  animTime: number;
 }) {
-  const [flicker, setFlicker] = useState(0);
-
-  useEffect(() => {
-    let frame: number;
-    const animate = () => {
-      setFlicker((f) => f + 0.1);
-      frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  const opacity = 0.5 + Math.sin(flicker) * 0.1;
+  const opacity = 0.5 + Math.sin(animTime * 5) * 0.1;
 
   return (
     <g
@@ -259,6 +267,7 @@ export default function NightView({
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart = useRef({ x: 0, y: 0 });
+  const animTime = useSharedAnimationTime();
 
   const gridWidth = world.grid.width * CELL_SIZE;
   const gridHeight = world.grid.height * CELL_SIZE;
@@ -408,6 +417,7 @@ export default function NightView({
               sign={sign}
               onClick={() => onSelectSign(sign)}
               isSelected={selectedSign?.id === sign.id}
+              animTime={animTime}
             />
           ))}
         </g>
@@ -430,6 +440,7 @@ export default function NightView({
                 isSleeping={isSleeping}
                 onClick={() => onSelectAgent(agent)}
                 isSelected={selectedAgent?.id === agent.id}
+                animTime={animTime}
               />
             );
           })}

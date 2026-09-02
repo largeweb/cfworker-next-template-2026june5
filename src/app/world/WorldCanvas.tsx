@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, lazy, useState, useCallback } from "react";
+import { Suspense, lazy, useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useWorld, useAnimationState } from "@/lib/use-world";
 import type { ViewMode, Agent, Sign, WorldState, AnimationState } from "@/lib/world-types";
@@ -124,6 +124,34 @@ function AgentModal({
   agent: Agent;
   onClose: () => void;
 }) {
+  const [agentDetails, setAgentDetails] = useState<Agent | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    
+    fetch(`/api/world/agent/${agent.id}`)
+      .then((res) => res.json() as Promise<Agent & { error?: string }>)
+      .then((data) => {
+        if (!cancelled && data && !data.error) {
+          setAgentDetails(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.id]);
+
+  const displayAgent = agentDetails || agent;
+  const displayEnergy = Math.round(displayAgent.energy);
+  const displayHealth = Math.round(displayAgent.health);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40">
       <div
@@ -132,10 +160,10 @@ function AgentModal({
       >
         <div className="flex items-center justify-between p-4 border-b border-[var(--garden-dust)]">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{agent.symbol}</span>
+            <span className="text-2xl">{displayAgent.symbol}</span>
             <div>
-              <h3 className="font-bold text-[var(--garden-ink)]">{agent.name}</h3>
-              <p className="text-xs text-[var(--garden-ink-light)] capitalize">{agent.status}</p>
+              <h3 className="font-bold text-[var(--garden-ink)]">{displayAgent.name}</h3>
+              <p className="text-xs text-[var(--garden-ink-light)] capitalize">{displayAgent.status}</p>
             </div>
           </div>
           <button
@@ -152,38 +180,42 @@ function AgentModal({
           <div className="flex gap-4 text-sm">
             <div className="flex-1 bg-[var(--garden-paper-dark)] rounded p-2">
               <div className="text-xs text-[var(--garden-ink-light)] mb-1">Energy</div>
-              <div className="font-bold text-[var(--garden-olive)]">{agent.energy}</div>
+              <div className="font-bold text-[var(--garden-olive)]">{displayEnergy}</div>
             </div>
             <div className="flex-1 bg-[var(--garden-paper-dark)] rounded p-2">
               <div className="text-xs text-[var(--garden-ink-light)] mb-1">Health</div>
-              <div className="font-bold text-[var(--garden-terracotta)]">{agent.health}</div>
+              <div className="font-bold text-[var(--garden-terracotta)]">{displayHealth}</div>
             </div>
             <div className="flex-1 bg-[var(--garden-paper-dark)] rounded p-2">
               <div className="text-xs text-[var(--garden-ink-light)] mb-1">Position</div>
               <div className="font-bold text-[var(--garden-ink)]">
-                {agent.x}, {agent.y}
+                {displayAgent.x}, {displayAgent.y}
               </div>
             </div>
           </div>
 
-          {agent.thought && (
+          {loading ? (
+            <div className="text-sm text-[var(--garden-ink-light)] italic font-serif">
+              Loading thoughts...
+            </div>
+          ) : displayAgent.thought ? (
             <div>
               <div className="text-xs text-[var(--garden-ink-light)] mb-1 font-medium uppercase tracking-wider">
                 Last Thought
               </div>
               <p className="text-sm text-[var(--garden-ink)] font-serif leading-relaxed bg-[var(--garden-paper-dark)] p-3 rounded border-l-2 border-[var(--garden-olive)]">
-                {agent.thought}
+                {displayAgent.thought}
               </p>
             </div>
-          )}
+          ) : null}
 
-          {agent.log && agent.log.length > 0 && (
+          {!loading && displayAgent.log && displayAgent.log.length > 0 && (
             <div>
               <div className="text-xs text-[var(--garden-ink-light)] mb-2 font-medium uppercase tracking-wider">
                 Log
               </div>
               <div className="space-y-1 max-h-48 overflow-y-auto flex flex-col-reverse">
-                {agent.log.map((entry, i) => (
+                {displayAgent.log.map((entry, i) => (
                   <div
                     key={i}
                     className="text-xs text-[var(--garden-ink-light)] font-serif py-1 border-b border-[var(--garden-dust-light)] last:border-0"
