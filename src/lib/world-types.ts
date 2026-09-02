@@ -1,13 +1,23 @@
+export interface GridCell {
+  terrain?: string;
+}
+
+export type GridShape = { width: number; height: number } | GridCell[][];
+
 export interface WorldState {
   tick: number;
-  grid: {
-    width: number;
-    height: number;
-  };
+  grid: GridShape;
   agents: Agent[];
   signs: Sign[];
   events: WorldEvent[];
   timestamp: string;
+}
+
+export function getGridDimensions(grid: GridShape): { width: number; height: number } {
+  if (Array.isArray(grid)) {
+    return { width: grid.length, height: grid[0]?.length ?? 0 };
+  }
+  return { width: grid.width, height: grid.height };
 }
 
 export interface Agent {

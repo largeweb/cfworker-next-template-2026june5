@@ -1,90 +1,129 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, memo } from "react";
 import type { ViewProps } from "../WorldCanvas";
 import type { Agent, Sign } from "@/lib/world-types";
-import { getAgentSymbolType } from "@/lib/world-types";
+import { getAgentSymbolType, getGridDimensions } from "@/lib/world-types";
 
 const CELL_SIZE = 48;
-const MIN_ZOOM = 0.3;
-const MAX_ZOOM = 2.5;
 
-interface Position {
-  x: number;
-  y: number;
-}
-
-const AGENT_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  clay: { bg: "var(--garden-terracotta)", border: "var(--garden-terracotta-dark)", text: "var(--garden-paper)" },
-  thorn: { bg: "var(--garden-thorn)", border: "var(--garden-coal)", text: "var(--garden-dust)" },
-  reed: { bg: "var(--garden-reed)", border: "var(--garden-dust)", text: "var(--garden-ink)" },
-  cole: { bg: "var(--garden-coal)", border: "var(--garden-thorn)", text: "var(--garden-dust)" },
-  sol: { bg: "var(--garden-gold)", border: "var(--garden-wood)", text: "var(--garden-ink)" },
+const AGENT_COLORS: Record<string, { bg: string; text: string }> = {
+  clay: { bg: "#c4644a", text: "#fff" },
+  thorn: { bg: "#4a4540", text: "#ccc" },
+  reed: { bg: "#b8b0a0", text: "#333" },
+  cole: { bg: "#3d3835", text: "#ccc" },
+  sol: { bg: "#d4a54a", text: "#333" },
 };
 
-function AgentToken({
+const AgentToken = memo(function AgentToken({
   agent,
-  position,
-  isThinking,
-  isSleeping,
-  onClick,
+  x,
+  y,
   isSelected,
+  onClick,
 }: {
   agent: Agent;
-  position: Position;
-  isThinking: boolean;
-  isSleeping: boolean;
-  onClick: () => void;
+  x: number;
+  y: number;
   isSelected: boolean;
+  onClick: () => void;
 }) {
   const symbolType = getAgentSymbolType(agent.symbol);
   const c = AGENT_COLORS[symbolType];
+  const isSleeping = agent.status === "sleeping";
+  const isThinking = agent.status === "thinking";
 
   return (
-    <g
-      transform={`translate(${position.x * CELL_SIZE + CELL_SIZE / 2}, ${position.y * CELL_SIZE + CELL_SIZE / 2})`}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      style={{ cursor: "pointer" }}
-      className=""
+    <div
+      onClick={onClick}
+      style={{
+        position: "absolute",
+        left: x * CELL_SIZE + CELL_SIZE / 2 - 16,
+        top: y * CELL_SIZE + CELL_SIZE / 2 - 16,
+        width: 32,
+        height: 32,
+        backgroundColor: c.bg,
+        color: c.text,
+        borderRadius: 4,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: "bold",
+        fontSize: 14,
+        fontFamily: "serif",
+        cursor: "pointer",
+        opacity: isSleeping ? 0.5 : 1,
+        border: isSelected ? "3px solid #6b7c5a" : "2px solid rgba(0,0,0,0.2)",
+        boxSizing: "border-box",
+      }}
     >
-      <rect x={-16} y={-16} width={32} height={32} rx={4} fill={c.bg}
-        stroke={isSelected ? "var(--garden-olive)" : c.border}
-        strokeWidth={isSelected ? 3 : 2} opacity={isSleeping ? 0.5 : 1} />
-      <text x={0} y={6} textAnchor="middle" fill={c.text} fontSize={14} fontWeight="bold" fontFamily="serif" opacity={isSleeping ? 0.6 : 1}>
-        {agent.name.charAt(0).toUpperCase()}
-      </text>
+      {agent.name.charAt(0).toUpperCase()}
       {isThinking && (
-        <g>
-          <circle cx={14} cy={-14} r={4} fill="var(--garden-olive)" />
-          <circle cx={18} cy={-20} r={2.5} fill="var(--garden-olive)" opacity={0.7} />
-          <circle cx={20} cy={-26} r={1.5} fill="var(--garden-olive)" opacity={0.5} />
-        </g>
+        <div
+          style={{
+            position: "absolute",
+            top: -8,
+            right: -8,
+            width: 12,
+            height: 12,
+            backgroundColor: "#6b7c5a",
+            borderRadius: "50%",
+          }}
+        />
       )}
       {isSleeping && (
-        <text x={16} y={-12} fontSize={10} fill="var(--garden-ink-light)" fontStyle="italic" fontFamily="cursive">z</text>
+        <div
+          style={{
+            position: "absolute",
+            top: -6,
+            right: -4,
+            fontSize: 10,
+            color: "#666",
+            fontStyle: "italic",
+          }}
+        >
+          z
+        </div>
       )}
-    </g>
+    </div>
   );
-}
+});
 
-function SignMarker({ sign, onClick, isSelected }: { sign: Sign; onClick: () => void; isSelected: boolean }) {
-  const preview = sign.text.slice(0, 4);
-
+const SignToken = memo(function SignToken({
+  sign,
+  isSelected,
+  onClick,
+}: {
+  sign: Sign;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
   return (
-    <g
-      transform={`translate(${sign.x * CELL_SIZE + CELL_SIZE / 2}, ${sign.y * CELL_SIZE + CELL_SIZE / 2})`}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      style={{ cursor: "pointer" }}
+    <div
+      onClick={onClick}
+      style={{
+        position: "absolute",
+        left: sign.x * CELL_SIZE + CELL_SIZE / 2 - 12,
+        top: sign.y * CELL_SIZE + CELL_SIZE / 2 - 8,
+        width: 24,
+        height: 16,
+        backgroundColor: "#8b6f47",
+        borderRadius: 2,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 7,
+        fontFamily: "monospace",
+        color: "#fff",
+        cursor: "pointer",
+        border: isSelected ? "2px solid #6b7c5a" : "1px solid #5c4a32",
+        boxSizing: "border-box",
+      }}
     >
-      <rect x={-12} y={-8} width={24} height={16} rx={2} fill="var(--garden-wood)"
-        stroke={isSelected ? "var(--garden-olive)" : "var(--garden-wood-dark)"} strokeWidth={isSelected ? 2 : 1} />
-      <line x1={0} y1={8} x2={0} y2={16} stroke="var(--garden-wood-dark)" strokeWidth={3} />
-      <text x={0} y={3} textAnchor="middle" fill="var(--garden-paper)" fontSize={7} fontFamily="monospace" fontWeight="bold">
-        {preview}
-      </text>
-    </g>
+      {sign.text.slice(0, 4)}
+    </div>
   );
-}
+});
 
 export default function JournalView({
   world,
@@ -93,7 +132,6 @@ export default function JournalView({
   selectedSign,
   onSelectAgent,
   onSelectSign,
-  followedAgentId,
 }: ViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -103,40 +141,28 @@ export default function JournalView({
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart = useRef({ x: 0, y: 0 });
 
-  const gridWidth = world.grid.width * CELL_SIZE;
-  const gridHeight = world.grid.height * CELL_SIZE;
+  const { width: gridWidth, height: gridHeight } = getGridDimensions(world.grid);
+  const pixelWidth = gridWidth * CELL_SIZE;
+  const pixelHeight = gridHeight * CELL_SIZE;
 
   const centerGrid = useCallback(() => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    setPan({ x: (rect.width - gridWidth) / 2, y: (rect.height - gridHeight) / 2 });
+    setPan({ x: (rect.width - pixelWidth) / 2, y: (rect.height - pixelHeight) / 2 });
     setZoom(1);
-  }, [gridWidth, gridHeight]);
+  }, [pixelWidth, pixelHeight]);
 
   useEffect(() => {
-    if (!initialized && containerRef.current) {
+    if (!initialized && containerRef.current && gridWidth > 0) {
       centerGrid();
       setInitialized(true);
     }
-  }, [initialized, centerGrid]);
-
-  useEffect(() => {
-    if (followedAgentId) {
-      const pos = animState.agentPositions.get(followedAgentId);
-      if (pos && containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        setPan({
-          x: rect.width / 2 - pos.x * CELL_SIZE * zoom - CELL_SIZE / 2,
-          y: rect.height / 2 - pos.y * CELL_SIZE * zoom - CELL_SIZE / 2,
-        });
-      }
-    }
-  }, [followedAgentId, animState.agentPositions, zoom]);
+  }, [initialized, centerGrid, gridWidth]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * delta));
+    const newZoom = Math.max(0.3, Math.min(2.5, zoom * delta));
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const mouseX = e.clientX - rect.left;
@@ -150,7 +176,7 @@ export default function JournalView({
     setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY };
     panStart.current = { x: pan.x, y: pan.y };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   }, [pan]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
@@ -160,62 +186,61 @@ export default function JournalView({
 
   const handlePointerUp = useCallback(() => setIsDragging(false), []);
 
-  const gridLines = [];
-  for (let x = 0; x <= world.grid.width; x++) {
-    gridLines.push(
-      <line key={`v${x}`} x1={x * CELL_SIZE} y1={0} x2={x * CELL_SIZE} y2={gridHeight}
-        stroke="var(--garden-dust)" strokeWidth={0.5} opacity={0.5} />
-    );
-  }
-  for (let y = 0; y <= world.grid.height; y++) {
-    gridLines.push(
-      <line key={`h${y}`} x1={0} y1={y * CELL_SIZE} x2={gridWidth} y2={y * CELL_SIZE}
-        stroke="var(--garden-dust)" strokeWidth={0.5} opacity={0.5} />
-    );
-  }
-
   return (
     <div
       ref={containerRef}
-      className="w-full h-full overflow-hidden bg-[var(--garden-paper)] cursor-grab active:cursor-grabbing"
+      className="w-full h-full overflow-hidden cursor-grab active:cursor-grabbing"
+      style={{ backgroundColor: "var(--garden-paper)" }}
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
-      <svg width="100%" height="100%" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}>
-        <rect x={0} y={0} width={gridWidth} height={gridHeight} fill="var(--garden-paper)" stroke="var(--garden-dust)" strokeWidth={2} />
-        <g>{gridLines}</g>
+      <div
+        style={{
+          position: "relative",
+          width: pixelWidth,
+          height: pixelHeight,
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: "0 0",
+          backgroundColor: "var(--garden-paper)",
+          border: "2px solid var(--garden-dust)",
+          backgroundImage: `
+            repeating-linear-gradient(0deg, var(--garden-dust) 0px, var(--garden-dust) 1px, transparent 1px, transparent ${CELL_SIZE}px),
+            repeating-linear-gradient(90deg, var(--garden-dust) 0px, var(--garden-dust) 1px, transparent 1px, transparent ${CELL_SIZE}px)
+          `,
+          backgroundSize: `${CELL_SIZE}px ${CELL_SIZE}px`,
+        }}
+      >
+        {world.signs.map((sign) => (
+          <SignToken
+            key={sign.id}
+            sign={sign}
+            isSelected={selectedSign?.id === sign.id}
+            onClick={() => onSelectSign(sign)}
+          />
+        ))}
 
-        <g>
-          {world.signs.map((sign) => (
-            <SignMarker key={sign.id} sign={sign} onClick={() => onSelectSign(sign)} isSelected={selectedSign?.id === sign.id} />
-          ))}
-        </g>
-
-        <g>
-          {world.agents.map((agent) => {
-            const pos = animState.agentPositions.get(agent.id) || { x: agent.x, y: agent.y };
-            return (
-              <AgentToken
-                key={agent.id}
-                agent={agent}
-                position={pos}
-                isThinking={animState.thinkingAgents.has(agent.id)}
-                isSleeping={agent.status === "sleeping"}
-                onClick={() => onSelectAgent(agent)}
-                isSelected={selectedAgent?.id === agent.id}
-              />
-            );
-          })}
-        </g>
-      </svg>
+        {world.agents.map((agent) => {
+          const pos = animState.agentPositions.get(agent.id) || { x: agent.x, y: agent.y };
+          return (
+            <AgentToken
+              key={agent.id}
+              agent={agent}
+              x={pos.x}
+              y={pos.y}
+              isSelected={selectedAgent?.id === agent.id}
+              onClick={() => onSelectAgent(agent)}
+            />
+          );
+        })}
+      </div>
 
       <div className="absolute bottom-4 left-4 flex gap-2">
-        <button onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.2))}
+        <button onClick={() => setZoom((z) => Math.min(2.5, z * 1.2))}
           className="w-8 h-8 bg-[var(--garden-paper-dark)] border border-[var(--garden-dust)] rounded text-[var(--garden-ink)] hover:bg-[var(--garden-dust-light)]">+</button>
-        <button onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.2))}
+        <button onClick={() => setZoom((z) => Math.max(0.3, z / 1.2))}
           className="w-8 h-8 bg-[var(--garden-paper-dark)] border border-[var(--garden-dust)] rounded text-[var(--garden-ink)] hover:bg-[var(--garden-dust-light)]">−</button>
         <button onClick={centerGrid}
           className="px-3 h-8 bg-[var(--garden-paper-dark)] border border-[var(--garden-dust)] rounded text-xs text-[var(--garden-ink)] hover:bg-[var(--garden-dust-light)]">Reset</button>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ViewProps } from "../WorldCanvas";
 import type { Agent, Sign } from "@/lib/world-types";
-import { getAgentSymbolType } from "@/lib/world-types";
+import { getAgentSymbolType, getGridDimensions } from "@/lib/world-types";
 
 const CELL_SIZE = 32;
 const MIN_ZOOM = 0.5;
@@ -264,8 +264,9 @@ export default function TheaterView({
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart = useRef({ x: 0, y: 0 });
 
-  const gridWidth = world.grid.width * CELL_SIZE;
-  const gridHeight = world.grid.height * CELL_SIZE;
+  const { width: worldWidth, height: worldHeight } = getGridDimensions(world.grid);
+  const gridWidth = worldWidth * CELL_SIZE;
+  const gridHeight = worldHeight * CELL_SIZE;
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -361,7 +362,7 @@ export default function TheaterView({
             strokeWidth={1}
           />
 
-          {Array.from({ length: world.grid.width + 1 }, (_, x) => (
+          {Array.from({ length: worldWidth + 1 }, (_, x) => (
             <line
               key={`v${x}`}
               x1={x * CELL_SIZE}
@@ -373,7 +374,7 @@ export default function TheaterView({
               opacity={0.4}
             />
           ))}
-          {Array.from({ length: world.grid.height + 1 }, (_, y) => (
+          {Array.from({ length: worldHeight + 1 }, (_, y) => (
             <line
               key={`h${y}`}
               x1={0}

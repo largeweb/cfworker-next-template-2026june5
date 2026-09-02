@@ -1,103 +1,153 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, memo, useMemo } from "react";
 import type { ViewProps } from "../WorldCanvas";
 import type { Agent, Sign } from "@/lib/world-types";
-import { getAgentSymbolType } from "@/lib/world-types";
+import { getAgentSymbolType, getGridDimensions } from "@/lib/world-types";
 
-const CELL_SIZE = 48;
-const MIN_ZOOM = 0.3;
-const MAX_ZOOM = 2.5;
+const CELL_SIZE = 32;
 
-interface Position {
-  x: number;
-  y: number;
-}
-
-const NIGHT_TOKEN_COLORS: Record<string, { glow: string; core: string }> = {
-  clay: { glow: "#e87c3f", core: "#c4644a" },
-  thorn: { glow: "#6b6560", core: "#4a4540" },
-  reed: { glow: "#d0c8b8", core: "#b8b0a0" },
-  cole: { glow: "#555550", core: "#3d3835" },
-  sol: { glow: "#ffd080", core: "#d4a54a" },
+const AGENT_GLOW: Record<string, string> = {
+  clay: "#ff9070",
+  thorn: "#8888aa",
+  reed: "#e0d8c8",
+  cole: "#666688",
+  sol: "#ffdd70",
 };
 
-function NightToken({
+const AgentToken = memo(function AgentToken({
   agent,
-  position,
-  isThinking,
-  isSleeping,
-  onClick,
+  x,
+  y,
   isSelected,
+  onClick,
 }: {
   agent: Agent;
-  position: Position;
-  isThinking: boolean;
-  isSleeping: boolean;
-  onClick: () => void;
+  x: number;
+  y: number;
   isSelected: boolean;
+  onClick: () => void;
 }) {
   const symbolType = getAgentSymbolType(agent.symbol);
-  const c = NIGHT_TOKEN_COLORS[symbolType];
+  const glow = AGENT_GLOW[symbolType];
+  const isSleeping = agent.status === "sleeping";
+  const isThinking = agent.status === "thinking";
 
   return (
-    <g
-      transform={`translate(${position.x * CELL_SIZE + CELL_SIZE / 2}, ${position.y * CELL_SIZE + CELL_SIZE / 2})`}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      style={{ cursor: "pointer" }}
+    <div
+      onClick={onClick}
+      style={{
+        position: "absolute",
+        left: x * CELL_SIZE + CELL_SIZE / 2 - 8,
+        top: y * CELL_SIZE + CELL_SIZE / 2 - 8,
+        width: 16,
+        height: 16,
+        backgroundColor: glow,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: "bold",
+        fontSize: 10,
+        fontFamily: "serif",
+        color: "#111",
+        cursor: "pointer",
+        opacity: isSleeping ? 0.4 : 0.9,
+        border: isSelected ? "2px solid #fff" : "none",
+        boxSizing: "border-box",
+        boxShadow: `0 0 8px ${glow}`,
+      }}
     >
-      <circle cx={0} cy={0} r={20} fill={c.glow} opacity={isSleeping ? 0.15 : 0.3} />
-      <rect x={-14} y={-14} width={28} height={28} rx={4} fill={c.core}
-        stroke={isSelected ? "var(--garden-gold)" : "transparent"} strokeWidth={2} opacity={isSleeping ? 0.5 : 0.9} />
-      <text x={0} y={5} textAnchor="middle" fill="var(--garden-paper)" fontSize={14} fontWeight="bold" fontFamily="serif" opacity={isSleeping ? 0.4 : 0.9}>
-        {agent.name.charAt(0).toUpperCase()}
-      </text>
+      {agent.name.charAt(0).toUpperCase()}
       {isThinking && (
-        <g>
-          <circle cx={14} cy={-14} r={3} fill="var(--garden-ember)" />
-          <circle cx={18} cy={-20} r={2} fill="var(--garden-ember)" opacity={0.7} />
-        </g>
+        <div
+          style={{
+            position: "absolute",
+            top: -4,
+            right: -4,
+            width: 6,
+            height: 6,
+            backgroundColor: "#88f",
+            borderRadius: "50%",
+          }}
+        />
       )}
-      {isSleeping && (
-        <text x={14} y={-10} fontSize={10} fill="var(--garden-dust)" fontStyle="italic" fontFamily="cursive">z</text>
-      )}
-    </g>
+    </div>
   );
-}
+});
 
-function NightSign({ sign, onClick, isSelected }: { sign: Sign; onClick: () => void; isSelected: boolean }) {
+const SignToken = memo(function SignToken({
+  sign,
+  isSelected,
+  onClick,
+}: {
+  sign: Sign;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
   return (
-    <g
-      transform={`translate(${sign.x * CELL_SIZE + CELL_SIZE / 2}, ${sign.y * CELL_SIZE + CELL_SIZE / 2})`}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      style={{ cursor: "pointer" }}
+    <div
+      onClick={onClick}
+      style={{
+        position: "absolute",
+        left: sign.x * CELL_SIZE + CELL_SIZE / 2 - 10,
+        top: sign.y * CELL_SIZE + CELL_SIZE / 2 - 6,
+        width: 20,
+        height: 12,
+        backgroundColor: "#3a3520",
+        borderRadius: 2,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 6,
+        fontFamily: "monospace",
+        color: "#aa9966",
+        cursor: "pointer",
+        border: isSelected ? "1px solid #fff" : "none",
+        boxSizing: "border-box",
+        boxShadow: "0 0 4px rgba(170,153,102,0.3)",
+      }}
     >
-      <rect x={-10} y={-6} width={20} height={12} rx={2} fill="var(--garden-wood-dark)"
-        stroke={isSelected ? "var(--garden-gold)" : "var(--garden-coal)"} strokeWidth={isSelected ? 2 : 1} opacity={0.6} />
-      <line x1={0} y1={6} x2={0} y2={14} stroke="var(--garden-coal)" strokeWidth={2} />
-      <text x={0} y={2} textAnchor="middle" fill="var(--garden-dust)" fontSize={6} fontFamily="monospace" opacity={0.6}>
-        {sign.text.slice(0, 3)}
-      </text>
-    </g>
+      {sign.text.slice(0, 3)}
+    </div>
   );
-}
+});
 
-function Fireflies({ width, height }: { width: number; height: number }) {
-  const fireflies = Array.from({ length: 12 }, (_, i) => ({
-    id: i,
-    x: (i * 137 + 50) % width,
-    y: (i * 89 + 30) % height,
-    size: 1 + (i % 2),
-  }));
+const Fireflies = memo(function Fireflies({ gridWidth, gridHeight }: { gridWidth: number; gridHeight: number }) {
+  const flies = useMemo(() => {
+    const result = [];
+    for (let i = 0; i < 8; i++) {
+      result.push({
+        id: i,
+        x: Math.random() * gridWidth * CELL_SIZE,
+        y: Math.random() * gridHeight * CELL_SIZE,
+        opacity: 0.3 + Math.random() * 0.5,
+      });
+    }
+    return result;
+  }, [gridWidth, gridHeight]);
 
   return (
-    <g>
-      {fireflies.map((f) => (
-        <circle key={f.id} cx={f.x} cy={f.y} r={f.size} fill="var(--garden-gold)" opacity={0.6} />
+    <>
+      {flies.map((f) => (
+        <div
+          key={f.id}
+          style={{
+            position: "absolute",
+            left: f.x,
+            top: f.y,
+            width: 4,
+            height: 4,
+            backgroundColor: "#ffff88",
+            borderRadius: "50%",
+            opacity: f.opacity,
+            pointerEvents: "none",
+          }}
+        />
       ))}
-    </g>
+    </>
   );
-}
+});
 
 export default function NightView({
   world,
@@ -109,18 +159,33 @@ export default function NightView({
 }: ViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(0.8);
   const [isDragging, setIsDragging] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart = useRef({ x: 0, y: 0 });
 
-  const gridWidth = world.grid.width * CELL_SIZE;
-  const gridHeight = world.grid.height * CELL_SIZE;
+  const { width: gridWidth, height: gridHeight } = getGridDimensions(world.grid);
+  const pixelWidth = gridWidth * CELL_SIZE;
+  const pixelHeight = gridHeight * CELL_SIZE;
+
+  const centerView = useCallback(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setPan({ x: (rect.width - pixelWidth * zoom) / 2, y: (rect.height - pixelHeight * zoom) / 2 });
+  }, [pixelWidth, pixelHeight, zoom]);
+
+  useEffect(() => {
+    if (!initialized && containerRef.current && gridWidth > 0) {
+      centerView();
+      setInitialized(true);
+    }
+  }, [initialized, centerView, gridWidth]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * delta));
+    const newZoom = Math.max(0.3, Math.min(2.5, zoom * delta));
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const mouseX = e.clientX - rect.left;
@@ -134,7 +199,7 @@ export default function NightView({
     setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY };
     panStart.current = { x: pan.x, y: pan.y };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   }, [pan]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
@@ -147,56 +212,62 @@ export default function NightView({
   return (
     <div
       ref={containerRef}
-      className="w-full h-full overflow-hidden bg-[var(--garden-night-bg)] cursor-grab active:cursor-grabbing"
+      className="w-full h-full overflow-hidden cursor-grab active:cursor-grabbing"
+      style={{ backgroundColor: "#0a0814" }}
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
-      <svg width="100%" height="100%" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }}>
-        <rect x={0} y={0} width={gridWidth} height={gridHeight} fill="var(--garden-night-bg)" />
+      <div
+        style={{
+          position: "relative",
+          width: pixelWidth,
+          height: pixelHeight,
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: "0 0",
+          backgroundColor: "#151020",
+          backgroundImage: `
+            repeating-linear-gradient(0deg, #1a1525 0px, #1a1525 1px, transparent 1px, transparent ${CELL_SIZE}px),
+            repeating-linear-gradient(90deg, #1a1525 0px, #1a1525 1px, transparent 1px, transparent ${CELL_SIZE}px)
+          `,
+          backgroundSize: `${CELL_SIZE}px ${CELL_SIZE}px`,
+        }}
+      >
+        <Fireflies gridWidth={gridWidth} gridHeight={gridHeight} />
 
-        <circle cx={gridWidth * 0.8} cy={gridHeight * 0.1} r={15} fill="#ffeedd" opacity={0.8} />
-
-        {Array.from({ length: world.grid.width + 1 }, (_, x) => (
-          <line key={`v${x}`} x1={x * CELL_SIZE} y1={0} x2={x * CELL_SIZE} y2={gridHeight} stroke="var(--garden-coal)" strokeWidth={0.5} opacity={0.15} />
+        {world.signs.map((sign) => (
+          <SignToken
+            key={sign.id}
+            sign={sign}
+            isSelected={selectedSign?.id === sign.id}
+            onClick={() => onSelectSign(sign)}
+          />
         ))}
-        {Array.from({ length: world.grid.height + 1 }, (_, y) => (
-          <line key={`h${y}`} x1={0} y1={y * CELL_SIZE} x2={gridWidth} y2={y * CELL_SIZE} stroke="var(--garden-coal)" strokeWidth={0.5} opacity={0.15} />
-        ))}
 
-        <Fireflies width={gridWidth} height={gridHeight} />
-
-        <g>
-          {world.signs.map((sign) => (
-            <NightSign key={sign.id} sign={sign} onClick={() => onSelectSign(sign)} isSelected={selectedSign?.id === sign.id} />
-          ))}
-        </g>
-
-        <g>
-          {world.agents.map((agent) => {
-            const pos = animState.agentPositions.get(agent.id) || { x: agent.x, y: agent.y };
-            return (
-              <NightToken
-                key={agent.id}
-                agent={agent}
-                position={pos}
-                isThinking={animState.thinkingAgents.has(agent.id)}
-                isSleeping={agent.status === "sleeping"}
-                onClick={() => onSelectAgent(agent)}
-                isSelected={selectedAgent?.id === agent.id}
-              />
-            );
-          })}
-        </g>
-      </svg>
+        {world.agents.map((agent) => {
+          const pos = animState.agentPositions.get(agent.id) || { x: agent.x, y: agent.y };
+          return (
+            <AgentToken
+              key={agent.id}
+              agent={agent}
+              x={pos.x}
+              y={pos.y}
+              isSelected={selectedAgent?.id === agent.id}
+              onClick={() => onSelectAgent(agent)}
+            />
+          );
+        })}
+      </div>
 
       <div className="absolute bottom-4 left-4 flex gap-2">
-        <button onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.2))}
-          className="w-8 h-8 bg-[var(--garden-coal)] border border-[var(--garden-thorn)] rounded text-[var(--garden-dust)] hover:bg-[var(--garden-thorn)]">+</button>
-        <button onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.2))}
-          className="w-8 h-8 bg-[var(--garden-coal)] border border-[var(--garden-thorn)] rounded text-[var(--garden-dust)] hover:bg-[var(--garden-thorn)]">−</button>
+        <button onClick={() => setZoom((z) => Math.min(2.5, z * 1.2))}
+          className="w-8 h-8 bg-[#1a1525] border border-[#333] rounded text-[#888] hover:bg-[#252035]">+</button>
+        <button onClick={() => setZoom((z) => Math.max(0.3, z / 1.2))}
+          className="w-8 h-8 bg-[#1a1525] border border-[#333] rounded text-[#888] hover:bg-[#252035]">−</button>
+        <button onClick={centerView}
+          className="px-3 h-8 bg-[#1a1525] border border-[#333] rounded text-xs text-[#888] hover:bg-[#252035]">Reset</button>
       </div>
     </div>
   );
