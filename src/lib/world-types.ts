@@ -87,3 +87,14 @@ export function getAgentSymbolType(symbol: string): "clay" | "thorn" | "reed" | 
   if (s.includes("sol") || s === "s") return "sol";
   return "clay";
 }
+
+export interface ViewProps {
+  world: WorldState;
+  animState: AnimationState;
+  selectedAgent: Agent | null;
+  selectedSign: Sign | null;
+  onSelectAgent: (agent: Agent | null) => void;
+  onSelectSign: (sign: Sign | null) => void;
+  followedAgentId: string | null;
+  onFollowAgent: (id: string | null) => void;
+}
