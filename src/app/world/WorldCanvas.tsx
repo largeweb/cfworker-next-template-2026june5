@@ -82,14 +82,14 @@ const SKINS: Record<Flavor, FlavorSkin> = {
     puffColor: "rgba(100,100,140,0.3)",
   },
   theater: {
-    background: "#2a1a1a",
-    gridColor: "#3a2a2a",
-    borderColor: "#8a4a2a",
-    signPost: "#4a2a1a",
-    signPlaque: "#6a4a3a",
-    signBorder: "#5a3a2a",
-    signText: "#9a7a6a",
-    puffColor: "rgba(140,80,60,0.3)",
+    background: "#1a1210",
+    gridColor: "#2a2018",
+    borderColor: "#6a4a30",
+    signPost: "#3a2a1a",
+    signPlaque: "#c8a878",
+    signBorder: "#8a6a4a",
+    signText: "#4a3a2a",
+    puffColor: "rgba(255,200,100,0.2)",
   },
   fab: {
     background: "#e0e0e8",
@@ -173,7 +173,7 @@ function FlavorSelect({ value, onChange }: { value: Flavor; onChange: (f: Flavor
         <option value="garden">{FLAVOR_LABELS.garden}</option>
         <option value="tabletop">{FLAVOR_LABELS.tabletop}</option>
         <option value="night">{FLAVOR_LABELS.night}</option>
-        <option value="theater" disabled>{FLAVOR_LABELS.theater} (coming soon)</option>
+        <option value="theater">{FLAVOR_LABELS.theater}</option>
         <option value="fab" disabled>{FLAVOR_LABELS.fab} (coming soon)</option>
       </select>
     </div>
@@ -327,30 +327,70 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
       ctx.stroke();
     }
 
+    const positions = getCurrentPositions();
+
+    if (flavor === "theater") {
+      const spotlightAgent = agents.find(a => a.status === "idle" || a.status === "thinking") 
+        || agents.find(a => a.status !== "sleeping" && a.status !== "downed")
+        || agents[0];
+      
+      if (spotlightAgent) {
+        const spotPos = positions.get(spotlightAgent.id) || { x: spotlightAgent.x, y: spotlightAgent.y };
+        const spotCx = spotPos.x * CELL_SIZE + CELL_SIZE / 2;
+        const spotCy = spotPos.y * CELL_SIZE + CELL_SIZE / 2;
+        
+        const gradient = ctx.createRadialGradient(spotCx, spotCy, 0, spotCx, spotCy, 80);
+        gradient.addColorStop(0, "rgba(255,240,200,0.25)");
+        gradient.addColorStop(0.4, "rgba(255,220,150,0.12)");
+        gradient.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      }
+    }
+
     for (const sign of signs) {
       const cx = sign.x * CELL_SIZE + CELL_SIZE / 2;
       const cy = sign.y * CELL_SIZE + CELL_SIZE / 2;
       
-      ctx.fillStyle = skin.signPost;
-      ctx.fillRect(cx - 1, cy + 2, 2, 4);
-      
-      ctx.fillStyle = skin.signPlaque;
-      ctx.strokeStyle = skin.signBorder;
-      ctx.lineWidth = 0.5;
-      ctx.beginPath();
-      ctx.roundRect(cx - 8, cy - 4, 16, 8, 1);
-      ctx.fill();
-      ctx.stroke();
-      
-      ctx.fillStyle = skin.signText;
-      ctx.font = "5px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      const label = sign.text.slice(0, 5);
-      ctx.fillText(label, cx, cy);
+      if (flavor === "theater") {
+        ctx.fillStyle = "#3a2a1a";
+        ctx.fillRect(cx - 1, cy + 3, 2, 5);
+        
+        ctx.fillStyle = "#c8a878";
+        ctx.strokeStyle = "#8a6a4a";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(cx - 10, cy - 6, 20, 12, 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = "#4a3a2a";
+        ctx.font = "bold 5px serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const label = sign.text.slice(0, 5).toUpperCase();
+        ctx.fillText(label, cx, cy);
+      } else {
+        ctx.fillStyle = skin.signPost;
+        ctx.fillRect(cx - 1, cy + 2, 2, 4);
+        
+        ctx.fillStyle = skin.signPlaque;
+        ctx.strokeStyle = skin.signBorder;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.roundRect(cx - 8, cy - 4, 16, 8, 1);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = skin.signText;
+        ctx.font = "5px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const label = sign.text.slice(0, 5);
+        ctx.fillText(label, cx, cy);
+      }
     }
 
-    const positions = getCurrentPositions();
     for (const agent of agents) {
       const pos = positions.get(agent.id) || { x: agent.x, y: agent.y, puff: false, trail: [] };
       const cx = pos.x * CELL_SIZE + CELL_SIZE / 2;
@@ -442,6 +482,23 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
             ctx.fill();
           }
         }
+      } else if (flavor === "theater") {
+        ctx.globalAlpha = isDimmed ? 0.15 : 1;
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + 1, 5, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(cx, cy - 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(255,255,200,0.4)";
+        ctx.beginPath();
+        ctx.arc(cx - 1, cy - 3, 1.5, 0, Math.PI * 2);
+        ctx.fill();
       } else {
         ctx.globalAlpha = isDimmed ? 0.5 : 1;
 
