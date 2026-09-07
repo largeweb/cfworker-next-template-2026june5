@@ -4,21 +4,50 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useWorld } from "@/lib/use-world";
 import type { Agent, Sign } from "@/lib/world-types";
-import { getAgentSymbolType } from "@/lib/world-types";
 
 const GRID_SIZE = 32;
 const CELL_SIZE = 14;
 const CANVAS_SIZE = GRID_SIZE * CELL_SIZE;
-const LERP_DURATION = 30000;
-const ANIMATION_INTERVAL = 50;
+const LERP_DURATION = 1500;
+const ANIMATION_INTERVAL = 33;
+
+type Flavor = "garden" | "tabletop" | "night" | "theater" | "fab";
+
+const FLAVOR_LABELS: Record<Flavor, string> = {
+  garden: "Garden",
+  tabletop: "Tabletop",
+  night: "Night",
+  theater: "Theater",
+  fab: "Fab",
+};
 
 const AGENT_COLORS: Record<string, string> = {
-  clay: "#c4644a",
-  thorn: "#4a4540",
-  reed: "#b8b0a0",
-  cole: "#3d3835",
-  sol: "#d4a54a",
+  clay: "#a05030",
+  thorn: "#3a5a3a",
+  reed: "#c9a040",
+  cole: "#404040",
+  sol: "#e0b020",
+  unknown: "#888888",
 };
+
+function getAgentColor(agent: Agent): string {
+  const appearance = (agent as Agent & { appearance?: string }).appearance;
+  if (appearance) {
+    const lower = appearance.toLowerCase();
+    if (lower.includes("brown") || lower.includes("clay")) return AGENT_COLORS.clay;
+    if (lower.includes("green") || lower.includes("thorn")) return AGENT_COLORS.thorn;
+    if (lower.includes("gold") || lower.includes("reed")) return AGENT_COLORS.reed;
+    if (lower.includes("charcoal") || lower.includes("cole") || lower.includes("dark")) return AGENT_COLORS.cole;
+    if (lower.includes("yellow") || lower.includes("sol")) return AGENT_COLORS.sol;
+  }
+  const name = (agent.name || agent.id || "").toLowerCase();
+  if (name.includes("clay")) return AGENT_COLORS.clay;
+  if (name.includes("thorn")) return AGENT_COLORS.thorn;
+  if (name.includes("reed")) return AGENT_COLORS.reed;
+  if (name.includes("cole")) return AGENT_COLORS.cole;
+  if (name.includes("sol")) return AGENT_COLORS.sol;
+  return AGENT_COLORS.unknown;
+}
 
 interface LerpPosition {
   fromX: number;
@@ -26,15 +55,29 @@ interface LerpPosition {
   toX: number;
   toY: number;
   startTime: number;
+  puffUntil: number;
 }
 
-function AgentModal({
-  agent,
-  onClose,
-}: {
-  agent: Agent;
-  onClose: () => void;
-}) {
+function FlavorSelect({ value, onChange }: { value: Flavor; onChange: (f: Flavor) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-[var(--garden-ink-light)]">Flavor:</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as Flavor)}
+        className="text-sm bg-[var(--garden-paper-dark)] border border-[var(--garden-dust)] rounded px-2 py-1 text-[var(--garden-ink)]"
+      >
+        <option value="garden">{FLAVOR_LABELS.garden}</option>
+        <option value="tabletop" disabled>{FLAVOR_LABELS.tabletop} (coming soon)</option>
+        <option value="night" disabled>{FLAVOR_LABELS.night} (coming soon)</option>
+        <option value="theater" disabled>{FLAVOR_LABELS.theater} (coming soon)</option>
+        <option value="fab" disabled>{FLAVOR_LABELS.fab} (coming soon)</option>
+      </select>
+    </div>
+  );
+}
+
+function AgentModal({ agent, onClose }: { agent: Agent; onClose: () => void }) {
   const [agentDetails, setAgentDetails] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
@@ -55,12 +98,8 @@ function AgentModal({
           }
         }
       })
-      .catch(() => {
-        if (!cancelled) setFetchError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      .catch(() => { if (!cancelled) setFetchError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
   }, [agent.id]);
@@ -127,24 +166,16 @@ function AgentModal({
   );
 }
 
-function CanvasMap({
-  agents,
-  signs,
-  onSelectAgent,
-}: {
-  agents: Agent[];
-  signs: Sign[];
-  onSelectAgent: (agent: Agent) => void;
-}) {
+function CanvasMap({ agents, signs, onSelectAgent }: { agents: Agent[]; signs: Sign[]; onSelectAgent: (agent: Agent) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lerpPositions = useRef<Map<string, LerpPosition>>(new Map());
-  const lastTickRef = useRef<number>(-1);
+  const prevPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const animationRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
 
   const getCurrentPositions = useCallback(() => {
     const now = Date.now();
-    const positions = new Map<string, { x: number; y: number }>();
+    const positions = new Map<string, { x: number; y: number; puff: boolean }>();
     
     for (const agent of agents) {
       const lerp = lerpPositions.current.get(agent.id);
@@ -155,9 +186,10 @@ function CanvasMap({
         positions.set(agent.id, {
           x: lerp.fromX + (lerp.toX - lerp.fromX) * eased,
           y: lerp.fromY + (lerp.toY - lerp.fromY) * eased,
+          puff: now < lerp.puffUntil,
         });
       } else {
-        positions.set(agent.id, { x: agent.x, y: agent.y });
+        positions.set(agent.id, { x: agent.x, y: agent.y, puff: false });
       }
     }
     return positions;
@@ -169,10 +201,10 @@ function CanvasMap({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.fillStyle = "#e8e0d0";
+    ctx.fillStyle = "#d8e4c8";
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    ctx.strokeStyle = "#c8c0b0";
+    ctx.strokeStyle = "#b8c4a8";
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= GRID_SIZE; i++) {
       const pos = i * CELL_SIZE;
@@ -189,61 +221,90 @@ function CanvasMap({
     for (const sign of signs) {
       const cx = sign.x * CELL_SIZE + CELL_SIZE / 2;
       const cy = sign.y * CELL_SIZE + CELL_SIZE / 2;
-      ctx.fillStyle = "#8b6f47";
-      ctx.fillRect(cx - 3, cy - 2, 6, 4);
+      
+      ctx.fillStyle = "#5a4020";
+      ctx.fillRect(cx - 1, cy + 2, 2, 4);
+      
+      ctx.fillStyle = "#c8a060";
+      ctx.strokeStyle = "#8b6030";
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.roundRect(cx - 8, cy - 4, 16, 8, 1);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = "#5a4020";
+      ctx.font = "5px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const label = sign.text.slice(0, 5);
+      ctx.fillText(label, cx, cy);
     }
 
     const positions = getCurrentPositions();
     for (const agent of agents) {
-      const pos = positions.get(agent.id) || { x: agent.x, y: agent.y };
+      const pos = positions.get(agent.id) || { x: agent.x, y: agent.y, puff: false };
       const cx = pos.x * CELL_SIZE + CELL_SIZE / 2;
       const cy = pos.y * CELL_SIZE + CELL_SIZE / 2;
-      const symbolType = getAgentSymbolType(agent.symbol);
-      const color = AGENT_COLORS[symbolType];
+      const color = getAgentColor(agent);
+      const isDimmed = agent.status === "sleeping" || agent.status === "downed";
 
-      ctx.beginPath();
-      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      if (pos.puff) {
+        ctx.fillStyle = "rgba(200,180,140,0.4)";
+        ctx.beginPath();
+        ctx.arc(cx, cy + 2, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = isDimmed ? 0.5 : 1;
+
       ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 1, 5, 3, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(cx, cy - 2, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.beginPath();
+      ctx.arc(cx - 1, cy - 3, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = 1;
     }
   }, [agents, signs, getCurrentPositions]);
 
   useEffect(() => {
-    mountedRef.current = true;
-
-    const tick = agents[0]?.lastAction?.tick ?? -1;
-    if (tick !== lastTickRef.current && lastTickRef.current !== -1) {
-      const now = Date.now();
-      for (const agent of agents) {
-        const current = lerpPositions.current.get(agent.id);
-        const fromX = current ? current.fromX + (current.toX - current.fromX) * Math.min(1, (now - current.startTime) / LERP_DURATION) : agent.x;
-        const fromY = current ? current.fromY + (current.toY - current.fromY) * Math.min(1, (now - current.startTime) / LERP_DURATION) : agent.y;
+    const now = Date.now();
+    for (const agent of agents) {
+      const prev = prevPositions.current.get(agent.id);
+      const current = lerpPositions.current.get(agent.id);
+      
+      if (!prev) {
         lerpPositions.current.set(agent.id, {
-          fromX,
-          fromY,
-          toX: agent.x,
-          toY: agent.y,
-          startTime: now,
+          fromX: agent.x, fromY: agent.y,
+          toX: agent.x, toY: agent.y,
+          startTime: now, puffUntil: 0,
+        });
+      } else if (prev.x !== agent.x || prev.y !== agent.y) {
+        const currentX = current ? current.fromX + (current.toX - current.fromX) * Math.min(1, (now - current.startTime) / LERP_DURATION) : prev.x;
+        const currentY = current ? current.fromY + (current.toY - current.fromY) * Math.min(1, (now - current.startTime) / LERP_DURATION) : prev.y;
+        lerpPositions.current.set(agent.id, {
+          fromX: currentX, fromY: currentY,
+          toX: agent.x, toY: agent.y,
+          startTime: now, puffUntil: now + 300,
         });
       }
-    } else if (lastTickRef.current === -1) {
-      for (const agent of agents) {
-        lerpPositions.current.set(agent.id, {
-          fromX: agent.x,
-          fromY: agent.y,
-          toX: agent.x,
-          toY: agent.y,
-          startTime: Date.now(),
-        });
-      }
+      prevPositions.current.set(agent.id, { x: agent.x, y: agent.y });
     }
-    lastTickRef.current = tick;
   }, [agents]);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     const handleVisibility = () => {
       if (document.hidden) {
         if (animationRef.current !== null) {
@@ -291,7 +352,7 @@ function CanvasMap({
       const cx = pos.x * CELL_SIZE + CELL_SIZE / 2;
       const cy = pos.y * CELL_SIZE + CELL_SIZE / 2;
       const dist = Math.sqrt((clickX - cx) ** 2 + (clickY - cy) ** 2);
-      if (dist < 10) {
+      if (dist < 12) {
         onSelectAgent(agent);
         return;
       }
@@ -304,7 +365,7 @@ function CanvasMap({
       width={CANVAS_SIZE}
       height={CANVAS_SIZE}
       onClick={handleClick}
-      className="w-full max-w-[448px] aspect-square border border-[var(--garden-dust)] rounded-lg cursor-pointer"
+      className="w-full max-w-[448px] aspect-square border-2 border-[var(--garden-olive)] rounded-lg cursor-pointer shadow-md"
     />
   );
 }
@@ -313,6 +374,7 @@ export function WorldCanvas() {
   const { world, loading, error } = useWorld();
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [canvasFailed, setCanvasFailed] = useState(false);
+  const [flavor, setFlavor] = useState<Flavor>("garden");
 
   useEffect(() => {
     try {
@@ -333,13 +395,16 @@ export function WorldCanvas() {
       className="min-h-screen bg-[var(--garden-paper)] flex flex-col"
       style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <header className="sticky top-0 z-40 border-b bg-[var(--garden-paper)] border-[var(--garden-dust)] px-4 py-4 sm:py-3">
-        <div className="flex items-center gap-3 max-w-3xl mx-auto">
-          <Link href="/" className="text-sm text-[var(--garden-ink-light)] hover:text-[var(--garden-ink)]">←</Link>
-          <div className="flex-1">
-            <h1 className="text-lg sm:text-base font-bold text-[var(--garden-ink)]">The Garden</h1>
-            <p className="text-sm text-[var(--garden-ink-light)] font-serif">tick {world.tick}</p>
+      <header className="sticky top-0 z-40 border-b bg-[var(--garden-paper)] border-[var(--garden-dust)] px-4 py-3">
+        <div className="flex items-center justify-between gap-3 max-w-3xl mx-auto">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-sm text-[var(--garden-ink-light)] hover:text-[var(--garden-ink)]">←</Link>
+            <div>
+              <h1 className="text-lg sm:text-base font-bold text-[var(--garden-ink)]">The Garden</h1>
+              <p className="text-sm text-[var(--garden-ink-light)] font-serif">tick {world.tick}</p>
+            </div>
           </div>
+          <FlavorSelect value={flavor} onChange={setFlavor} />
         </div>
       </header>
 
@@ -365,27 +430,37 @@ export function WorldCanvas() {
                   <div className="text-center text-[var(--garden-ink-light)] font-serif italic py-6">No agents yet.</div>
                 ) : (
                   <div className="space-y-2">
-                    {world.agents.map((agent) => (
-                      <button
-                        key={agent.id}
-                        onClick={() => handleSelectAgent(agent)}
-                        className="w-full text-left p-3 bg-[var(--garden-paper-dark)] rounded-lg border border-[var(--garden-dust)] active:bg-[var(--garden-dust-light)] transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">{agent.symbol}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-baseline justify-between gap-2">
-                              <span className="font-bold text-[var(--garden-ink)] truncate">{agent.name}</span>
-                              <span className="text-xs text-[var(--garden-ink-light)] capitalize shrink-0">{agent.status}</span>
+                    {world.agents.map((agent) => {
+                      const color = getAgentColor(agent);
+                      const isDimmed = agent.status === "sleeping" || agent.status === "downed";
+                      return (
+                        <button
+                          key={agent.id}
+                          onClick={() => handleSelectAgent(agent)}
+                          className="w-full text-left p-3 bg-[var(--garden-paper-dark)] rounded-lg border border-[var(--garden-dust)] active:bg-[var(--garden-dust-light)] transition-colors"
+                          style={{ opacity: isDimmed ? 0.6 : 1 }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                              style={{ backgroundColor: color }}
+                            >
+                              {(agent.name || "?").charAt(0).toUpperCase()}
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-[var(--garden-ink-light)]">
-                              <span>⚡{Math.round(agent.energy)}</span>
-                              <span>({agent.x},{agent.y})</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline justify-between gap-2">
+                                <span className="font-bold text-[var(--garden-ink)] truncate">{agent.name}</span>
+                                <span className="text-xs text-[var(--garden-ink-light)] capitalize shrink-0">{agent.status}</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-[var(--garden-ink-light)]">
+                                <span>⚡{Math.round(agent.energy)}</span>
+                                <span>({agent.x},{agent.y})</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
