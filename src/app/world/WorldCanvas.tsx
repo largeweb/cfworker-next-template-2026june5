@@ -30,6 +30,15 @@ const AGENT_COLORS: Record<string, string> = {
   unknown: "#888888",
 };
 
+const AGENT_GLOW_COLORS: Record<string, string> = {
+  clay: "#ff8060",
+  thorn: "#60ff80",
+  reed: "#ffdd60",
+  cole: "#a0a0c0",
+  sol: "#ffff80",
+  unknown: "#c0c0c0",
+};
+
 interface FlavorSkin {
   background: string;
   gridColor: string;
@@ -113,6 +122,25 @@ function getAgentColor(agent: Agent): string {
   return AGENT_COLORS.unknown;
 }
 
+function getAgentGlowColor(agent: Agent): string {
+  const appearance = (agent as Agent & { appearance?: string }).appearance;
+  if (appearance) {
+    const lower = appearance.toLowerCase();
+    if (lower.includes("brown") || lower.includes("clay")) return AGENT_GLOW_COLORS.clay;
+    if (lower.includes("green") || lower.includes("thorn")) return AGENT_GLOW_COLORS.thorn;
+    if (lower.includes("gold") || lower.includes("reed")) return AGENT_GLOW_COLORS.reed;
+    if (lower.includes("charcoal") || lower.includes("cole") || lower.includes("dark")) return AGENT_GLOW_COLORS.cole;
+    if (lower.includes("yellow") || lower.includes("sol")) return AGENT_GLOW_COLORS.sol;
+  }
+  const name = (agent.name || agent.id || "").toLowerCase();
+  if (name.includes("clay")) return AGENT_GLOW_COLORS.clay;
+  if (name.includes("thorn")) return AGENT_GLOW_COLORS.thorn;
+  if (name.includes("reed")) return AGENT_GLOW_COLORS.reed;
+  if (name.includes("cole")) return AGENT_GLOW_COLORS.cole;
+  if (name.includes("sol")) return AGENT_GLOW_COLORS.sol;
+  return AGENT_GLOW_COLORS.unknown;
+}
+
 function getEnergyPips(energy: number): number {
   if (energy >= 100) return 6;
   if (energy >= 80) return 5;
@@ -130,6 +158,7 @@ interface LerpPosition {
   toY: number;
   startTime: number;
   puffUntil: number;
+  trail: Array<{ x: number; y: number; t: number }>;
 }
 
 function FlavorSelect({ value, onChange }: { value: Flavor; onChange: (f: Flavor) => void }) {
@@ -143,7 +172,7 @@ function FlavorSelect({ value, onChange }: { value: Flavor; onChange: (f: Flavor
       >
         <option value="garden">{FLAVOR_LABELS.garden}</option>
         <option value="tabletop">{FLAVOR_LABELS.tabletop}</option>
-        <option value="night" disabled>{FLAVOR_LABELS.night} (coming soon)</option>
+        <option value="night">{FLAVOR_LABELS.night}</option>
         <option value="theater" disabled>{FLAVOR_LABELS.theater} (coming soon)</option>
         <option value="fab" disabled>{FLAVOR_LABELS.fab} (coming soon)</option>
       </select>
@@ -249,7 +278,7 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
 
   const getCurrentPositions = useCallback(() => {
     const now = Date.now();
-    const positions = new Map<string, { x: number; y: number; puff: boolean }>();
+    const positions = new Map<string, { x: number; y: number; puff: boolean; trail: Array<{ x: number; y: number; age: number }> }>();
     
     for (const agent of agents) {
       const lerp = lerpPositions.current.get(agent.id);
@@ -257,13 +286,17 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
         const elapsed = now - lerp.startTime;
         const t = Math.min(1, elapsed / LERP_DURATION);
         const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        const trail = lerp.trail
+          .filter(p => now - p.t < 400)
+          .map(p => ({ x: p.x, y: p.y, age: (now - p.t) / 400 }));
         positions.set(agent.id, {
           x: lerp.fromX + (lerp.toX - lerp.fromX) * eased,
           y: lerp.fromY + (lerp.toY - lerp.fromY) * eased,
           puff: now < lerp.puffUntil,
+          trail,
         });
       } else {
-        positions.set(agent.id, { x: agent.x, y: agent.y, puff: false });
+        positions.set(agent.id, { x: agent.x, y: agent.y, puff: false, trail: [] });
       }
     }
     return positions;
@@ -319,10 +352,11 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
 
     const positions = getCurrentPositions();
     for (const agent of agents) {
-      const pos = positions.get(agent.id) || { x: agent.x, y: agent.y, puff: false };
+      const pos = positions.get(agent.id) || { x: agent.x, y: agent.y, puff: false, trail: [] };
       const cx = pos.x * CELL_SIZE + CELL_SIZE / 2;
       const cy = pos.y * CELL_SIZE + CELL_SIZE / 2;
       const color = getAgentColor(agent);
+      const glowColor = getAgentGlowColor(agent);
       const isDimmed = agent.status === "sleeping" || agent.status === "downed";
 
       if (pos.puff) {
@@ -332,9 +366,48 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
         ctx.fill();
       }
 
-      ctx.globalAlpha = isDimmed ? 0.5 : 1;
+      if (flavor === "night") {
+        ctx.globalAlpha = isDimmed ? 0.25 : 1;
 
-      if (flavor === "tabletop") {
+        for (const tp of pos.trail) {
+          const tcx = tp.x * CELL_SIZE + CELL_SIZE / 2;
+          const tcy = tp.y * CELL_SIZE + CELL_SIZE / 2;
+          ctx.globalAlpha = (1 - tp.age) * 0.3 * (isDimmed ? 0.25 : 1);
+          ctx.fillStyle = glowColor;
+          ctx.beginPath();
+          ctx.arc(tcx, tcy, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.globalAlpha = isDimmed ? 0.25 : 1;
+
+        if (!isDimmed) {
+          ctx.fillStyle = glowColor;
+          ctx.globalAlpha = 0.3;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.globalAlpha = isDimmed ? 0.25 : 1;
+        ctx.fillStyle = glowColor;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.globalAlpha = (isDimmed ? 0.15 : 0.6);
+        ctx.beginPath();
+        ctx.arc(cx - 1, cy - 1, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else if (flavor === "tabletop") {
+        ctx.globalAlpha = isDimmed ? 0.5 : 1;
+
         ctx.fillStyle = "#4a3020";
         ctx.beginPath();
         ctx.arc(cx, cy, 6, 0, Math.PI * 2);
@@ -370,6 +443,8 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
           }
         }
       } else {
+        ctx.globalAlpha = isDimmed ? 0.5 : 1;
+
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.ellipse(cx, cy + 1, 5, 3, 0, 0, Math.PI * 2);
@@ -401,14 +476,18 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
           fromX: agent.x, fromY: agent.y,
           toX: agent.x, toY: agent.y,
           startTime: now, puffUntil: 0,
+          trail: [],
         });
       } else if (prev.x !== agent.x || prev.y !== agent.y) {
         const currentX = current ? current.fromX + (current.toX - current.fromX) * Math.min(1, (now - current.startTime) / LERP_DURATION) : prev.x;
         const currentY = current ? current.fromY + (current.toY - current.fromY) * Math.min(1, (now - current.startTime) / LERP_DURATION) : prev.y;
+        const existingTrail = current?.trail.filter(p => now - p.t < 400) || [];
+        existingTrail.push({ x: currentX, y: currentY, t: now });
         lerpPositions.current.set(agent.id, {
           fromX: currentX, fromY: currentY,
           toX: agent.x, toY: agent.y,
           startTime: now, puffUntil: now + 300,
+          trail: existingTrail.slice(-5),
         });
       }
       prevPositions.current.set(agent.id, { x: agent.x, y: agent.y });
