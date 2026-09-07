@@ -30,6 +30,70 @@ const AGENT_COLORS: Record<string, string> = {
   unknown: "#888888",
 };
 
+interface FlavorSkin {
+  background: string;
+  gridColor: string;
+  borderColor: string;
+  signPost: string;
+  signPlaque: string;
+  signBorder: string;
+  signText: string;
+  puffColor: string;
+}
+
+const SKINS: Record<Flavor, FlavorSkin> = {
+  garden: {
+    background: "#d8e4c8",
+    gridColor: "#b8c4a8",
+    borderColor: "#6b8e4a",
+    signPost: "#5a4020",
+    signPlaque: "#c8a060",
+    signBorder: "#8b6030",
+    signText: "#5a4020",
+    puffColor: "rgba(200,180,140,0.4)",
+  },
+  tabletop: {
+    background: "#2a5a3a",
+    gridColor: "#1a4a2a",
+    borderColor: "#8b6030",
+    signPost: "#3a2a10",
+    signPlaque: "#a08050",
+    signBorder: "#6b4020",
+    signText: "#3a2a10",
+    puffColor: "rgba(60,40,20,0.3)",
+  },
+  night: {
+    background: "#1a1a2a",
+    gridColor: "#2a2a3a",
+    borderColor: "#4a4a6a",
+    signPost: "#3a3a4a",
+    signPlaque: "#5a5a6a",
+    signBorder: "#4a4a5a",
+    signText: "#8a8a9a",
+    puffColor: "rgba(100,100,140,0.3)",
+  },
+  theater: {
+    background: "#2a1a1a",
+    gridColor: "#3a2a2a",
+    borderColor: "#8a4a2a",
+    signPost: "#4a2a1a",
+    signPlaque: "#6a4a3a",
+    signBorder: "#5a3a2a",
+    signText: "#9a7a6a",
+    puffColor: "rgba(140,80,60,0.3)",
+  },
+  fab: {
+    background: "#e0e0e8",
+    gridColor: "#c0c0c8",
+    borderColor: "#8080a0",
+    signPost: "#606070",
+    signPlaque: "#a0a0b0",
+    signBorder: "#808090",
+    signText: "#404050",
+    puffColor: "rgba(100,100,120,0.3)",
+  },
+};
+
 function getAgentColor(agent: Agent): string {
   const appearance = (agent as Agent & { appearance?: string }).appearance;
   if (appearance) {
@@ -47,6 +111,16 @@ function getAgentColor(agent: Agent): string {
   if (name.includes("cole")) return AGENT_COLORS.cole;
   if (name.includes("sol")) return AGENT_COLORS.sol;
   return AGENT_COLORS.unknown;
+}
+
+function getEnergyPips(energy: number): number {
+  if (energy >= 100) return 6;
+  if (energy >= 80) return 5;
+  if (energy >= 60) return 4;
+  if (energy >= 40) return 3;
+  if (energy >= 20) return 2;
+  if (energy > 0) return 1;
+  return 0;
 }
 
 interface LerpPosition {
@@ -68,7 +142,7 @@ function FlavorSelect({ value, onChange }: { value: Flavor; onChange: (f: Flavor
         className="text-sm bg-[var(--garden-paper-dark)] border border-[var(--garden-dust)] rounded px-2 py-1 text-[var(--garden-ink)]"
       >
         <option value="garden">{FLAVOR_LABELS.garden}</option>
-        <option value="tabletop" disabled>{FLAVOR_LABELS.tabletop} (coming soon)</option>
+        <option value="tabletop">{FLAVOR_LABELS.tabletop}</option>
         <option value="night" disabled>{FLAVOR_LABELS.night} (coming soon)</option>
         <option value="theater" disabled>{FLAVOR_LABELS.theater} (coming soon)</option>
         <option value="fab" disabled>{FLAVOR_LABELS.fab} (coming soon)</option>
@@ -166,7 +240,7 @@ function AgentModal({ agent, onClose }: { agent: Agent; onClose: () => void }) {
   );
 }
 
-function CanvasMap({ agents, signs, onSelectAgent }: { agents: Agent[]; signs: Sign[]; onSelectAgent: (agent: Agent) => void }) {
+function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; signs: Sign[]; onSelectAgent: (agent: Agent) => void; flavor: Flavor }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lerpPositions = useRef<Map<string, LerpPosition>>(new Map());
   const prevPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -201,10 +275,12 @@ function CanvasMap({ agents, signs, onSelectAgent }: { agents: Agent[]; signs: S
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.fillStyle = "#d8e4c8";
+    const skin = SKINS[flavor];
+
+    ctx.fillStyle = skin.background;
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    ctx.strokeStyle = "#b8c4a8";
+    ctx.strokeStyle = skin.gridColor;
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= GRID_SIZE; i++) {
       const pos = i * CELL_SIZE;
@@ -222,18 +298,18 @@ function CanvasMap({ agents, signs, onSelectAgent }: { agents: Agent[]; signs: S
       const cx = sign.x * CELL_SIZE + CELL_SIZE / 2;
       const cy = sign.y * CELL_SIZE + CELL_SIZE / 2;
       
-      ctx.fillStyle = "#5a4020";
+      ctx.fillStyle = skin.signPost;
       ctx.fillRect(cx - 1, cy + 2, 2, 4);
       
-      ctx.fillStyle = "#c8a060";
-      ctx.strokeStyle = "#8b6030";
+      ctx.fillStyle = skin.signPlaque;
+      ctx.strokeStyle = skin.signBorder;
       ctx.lineWidth = 0.5;
       ctx.beginPath();
       ctx.roundRect(cx - 8, cy - 4, 16, 8, 1);
       ctx.fill();
       ctx.stroke();
       
-      ctx.fillStyle = "#5a4020";
+      ctx.fillStyle = skin.signText;
       ctx.font = "5px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -250,7 +326,7 @@ function CanvasMap({ agents, signs, onSelectAgent }: { agents: Agent[]; signs: S
       const isDimmed = agent.status === "sleeping" || agent.status === "downed";
 
       if (pos.puff) {
-        ctx.fillStyle = "rgba(200,180,140,0.4)";
+        ctx.fillStyle = skin.puffColor;
         ctx.beginPath();
         ctx.arc(cx, cy + 2, 6, 0, Math.PI * 2);
         ctx.fill();
@@ -258,24 +334,61 @@ function CanvasMap({ agents, signs, onSelectAgent }: { agents: Agent[]; signs: S
 
       ctx.globalAlpha = isDimmed ? 0.5 : 1;
 
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + 1, 5, 3, 0, 0, Math.PI * 2);
-      ctx.fill();
+      if (flavor === "tabletop") {
+        ctx.fillStyle = "#4a3020";
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.fill();
 
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(cx, cy - 2, 4, 0, Math.PI * 2);
-      ctx.fill();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+        ctx.fill();
 
-      ctx.fillStyle = "rgba(255,255,255,0.3)";
-      ctx.beginPath();
-      ctx.arc(cx - 1, cy - 3, 1.5, 0, Math.PI * 2);
-      ctx.fill();
+        ctx.strokeStyle = "#2a1a10";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 5.5, 0, Math.PI * 2);
+        ctx.stroke();
+
+        const pips = getEnergyPips(agent.energy);
+        if (pips > 0) {
+          ctx.fillStyle = "rgba(255,255,255,0.8)";
+          const pipPositions = [
+            [[0, 0]],
+            [[-1.5, 0], [1.5, 0]],
+            [[-1.5, -1.5], [1.5, -1.5], [0, 1.5]],
+            [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]],
+            [[-1.5, -1.5], [1.5, -1.5], [0, 0], [-1.5, 1.5], [1.5, 1.5]],
+            [[-1.5, -2], [1.5, -2], [-1.5, 0], [1.5, 0], [-1.5, 2], [1.5, 2]],
+          ];
+          const layout = pipPositions[Math.min(pips, 6) - 1];
+          for (const [px, py] of layout) {
+            ctx.beginPath();
+            ctx.arc(cx + px, cy + py, 0.8, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      } else {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + 1, 5, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(cx, cy - 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.beginPath();
+        ctx.arc(cx - 1, cy - 3, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       ctx.globalAlpha = 1;
     }
-  }, [agents, signs, getCurrentPositions]);
+  }, [agents, signs, getCurrentPositions, flavor]);
 
   useEffect(() => {
     const now = Date.now();
@@ -359,13 +472,16 @@ function CanvasMap({ agents, signs, onSelectAgent }: { agents: Agent[]; signs: S
     }
   }, [agents, getCurrentPositions, onSelectAgent]);
 
+  const skin = SKINS[flavor];
+
   return (
     <canvas
       ref={canvasRef}
       width={CANVAS_SIZE}
       height={CANVAS_SIZE}
       onClick={handleClick}
-      className="w-full max-w-[448px] aspect-square border-2 border-[var(--garden-olive)] rounded-lg cursor-pointer shadow-md"
+      className="w-full max-w-[448px] aspect-square rounded-lg cursor-pointer shadow-md"
+      style={{ border: `2px solid ${skin.borderColor}` }}
     />
   );
 }
@@ -418,7 +534,7 @@ export function WorldCanvas() {
             <div className="flex flex-col lg:flex-row gap-6">
               {!canvasFailed && (
                 <div className="flex justify-center lg:justify-start">
-                  <CanvasMap agents={world.agents} signs={world.signs} onSelectAgent={handleSelectAgent} />
+                  <CanvasMap agents={world.agents} signs={world.signs} onSelectAgent={handleSelectAgent} flavor={flavor} />
                 </div>
               )}
 
