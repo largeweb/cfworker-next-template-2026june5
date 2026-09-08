@@ -39,6 +39,34 @@ const AGENT_GLOW_COLORS: Record<string, string> = {
   unknown: "#c0c0c0",
 };
 
+const AGENT_FAB_COLORS: Record<string, string> = {
+  clay: "#c08060",
+  thorn: "#60a080",
+  reed: "#a0a040",
+  cole: "#606080",
+  sol: "#c0c040",
+  unknown: "#808090",
+};
+
+function getAgentFabColor(agent: Agent): string {
+  const appearance = (agent as Agent & { appearance?: string }).appearance;
+  if (appearance) {
+    const lower = appearance.toLowerCase();
+    if (lower.includes("brown") || lower.includes("clay")) return AGENT_FAB_COLORS.clay;
+    if (lower.includes("green") || lower.includes("thorn")) return AGENT_FAB_COLORS.thorn;
+    if (lower.includes("gold") || lower.includes("reed")) return AGENT_FAB_COLORS.reed;
+    if (lower.includes("charcoal") || lower.includes("cole") || lower.includes("dark")) return AGENT_FAB_COLORS.cole;
+    if (lower.includes("yellow") || lower.includes("sol")) return AGENT_FAB_COLORS.sol;
+  }
+  const name = (agent.name || agent.id || "").toLowerCase();
+  if (name.includes("clay")) return AGENT_FAB_COLORS.clay;
+  if (name.includes("thorn")) return AGENT_FAB_COLORS.thorn;
+  if (name.includes("reed")) return AGENT_FAB_COLORS.reed;
+  if (name.includes("cole")) return AGENT_FAB_COLORS.cole;
+  if (name.includes("sol")) return AGENT_FAB_COLORS.sol;
+  return AGENT_FAB_COLORS.unknown;
+}
+
 interface FlavorSkin {
   background: string;
   gridColor: string;
@@ -92,14 +120,14 @@ const SKINS: Record<Flavor, FlavorSkin> = {
     puffColor: "rgba(255,200,100,0.2)",
   },
   fab: {
-    background: "#e0e0e8",
-    gridColor: "#c0c0c8",
-    borderColor: "#8080a0",
-    signPost: "#606070",
-    signPlaque: "#a0a0b0",
-    signBorder: "#808090",
-    signText: "#404050",
-    puffColor: "rgba(100,100,120,0.3)",
+    background: "#0a1018",
+    gridColor: "#1a3030",
+    borderColor: "#2a4a4a",
+    signPost: "#3a5a5a",
+    signPlaque: "#1a2828",
+    signBorder: "#4a8080",
+    signText: "#80c0c0",
+    puffColor: "rgba(80,200,200,0.2)",
   },
 };
 
@@ -174,7 +202,7 @@ function FlavorSelect({ value, onChange }: { value: Flavor; onChange: (f: Flavor
         <option value="tabletop">{FLAVOR_LABELS.tabletop}</option>
         <option value="night">{FLAVOR_LABELS.night}</option>
         <option value="theater">{FLAVOR_LABELS.theater}</option>
-        <option value="fab" disabled>{FLAVOR_LABELS.fab} (coming soon)</option>
+        <option value="fab">{FLAVOR_LABELS.fab}</option>
       </select>
     </div>
   );
@@ -352,7 +380,22 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
       const cx = sign.x * CELL_SIZE + CELL_SIZE / 2;
       const cy = sign.y * CELL_SIZE + CELL_SIZE / 2;
       
-      if (flavor === "theater") {
+      if (flavor === "fab") {
+        ctx.fillStyle = "#1a2828";
+        ctx.strokeStyle = "#4a8080";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(cx - 9, cy - 5, 18, 10, 1);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = "#80c0c0";
+        ctx.font = "bold 4px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const label = sign.text.slice(0, 6).toUpperCase();
+        ctx.fillText(label, cx, cy);
+      } else if (flavor === "theater") {
         ctx.fillStyle = "#3a2a1a";
         ctx.fillRect(cx - 1, cy + 3, 2, 5);
         
@@ -498,6 +541,53 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
         ctx.fillStyle = "rgba(255,255,200,0.4)";
         ctx.beginPath();
         ctx.arc(cx - 1, cy - 3, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (flavor === "fab") {
+        const fabColor = getAgentFabColor(agent);
+        ctx.globalAlpha = isDimmed ? 0.35 : 1;
+
+        ctx.fillStyle = "#0a1010";
+        ctx.beginPath();
+        ctx.roundRect(cx - 5, cy - 5, 10, 10, 1);
+        ctx.fill();
+
+        ctx.fillStyle = fabColor;
+        ctx.beginPath();
+        ctx.roundRect(cx - 4, cy - 4, 8, 8, 0.5);
+        ctx.fill();
+
+        ctx.strokeStyle = "#40c0c0";
+        ctx.lineWidth = 0.3;
+        ctx.beginPath();
+        ctx.moveTo(cx - 5, cy - 2);
+        ctx.lineTo(cx - 6, cy - 2);
+        ctx.moveTo(cx - 5, cy);
+        ctx.lineTo(cx - 6, cy);
+        ctx.moveTo(cx - 5, cy + 2);
+        ctx.lineTo(cx - 6, cy + 2);
+        ctx.moveTo(cx + 5, cy - 2);
+        ctx.lineTo(cx + 6, cy - 2);
+        ctx.moveTo(cx + 5, cy);
+        ctx.lineTo(cx + 6, cy);
+        ctx.moveTo(cx + 5, cy + 2);
+        ctx.lineTo(cx + 6, cy + 2);
+        ctx.moveTo(cx - 2, cy - 5);
+        ctx.lineTo(cx - 2, cy - 6);
+        ctx.moveTo(cx, cy - 5);
+        ctx.lineTo(cx, cy - 6);
+        ctx.moveTo(cx + 2, cy - 5);
+        ctx.lineTo(cx + 2, cy - 6);
+        ctx.moveTo(cx - 2, cy + 5);
+        ctx.lineTo(cx - 2, cy + 6);
+        ctx.moveTo(cx, cy + 5);
+        ctx.lineTo(cx, cy + 6);
+        ctx.moveTo(cx + 2, cy + 5);
+        ctx.lineTo(cx + 2, cy + 6);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(100,200,200,0.6)";
+        ctx.beginPath();
+        ctx.arc(cx - 2, cy - 2, 0.8, 0, Math.PI * 2);
         ctx.fill();
       } else {
         ctx.globalAlpha = isDimmed ? 0.5 : 1;
