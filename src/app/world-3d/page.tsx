@@ -93,6 +93,8 @@ export default function World3D() {
   const lerpPositionsRef = useRef<Map<string, { fromX: number; fromY: number; toX: number; toY: number; startTime: number }>>(new Map());
   const prevPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const worldDataRef = useRef<WorldData | null>(null);
+  const cameraInitializedRef = useRef(false);
+  const animateRef = useRef<(() => void) | null>(null);
 
   const [paused, setPaused] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -204,6 +206,10 @@ export default function World3D() {
           cancelAnimationFrame(rafRef.current);
           rafRef.current = null;
         }
+      } else {
+        if (rafRef.current === null && mountedRef.current && animateRef.current) {
+          rafRef.current = requestAnimationFrame(animateRef.current);
+        }
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
@@ -231,11 +237,28 @@ export default function World3D() {
     const renderer = rendererRef.current;
 
     const animate = () => {
-      if (!mountedRef.current || document.hidden) return;
+      if (!mountedRef.current) return;
+      if (document.hidden) {
+        rafRef.current = null;
+        return;
+      }
 
       const world = worldDataRef.current;
       if (world) {
         const now = Date.now();
+
+        if (!cameraInitializedRef.current && world.agents.length > 0) {
+          cameraInitializedRef.current = true;
+          const idleAgent = world.agents.find(a => a.status === "idle" || a.status === "thinking");
+          const targetAgent = idleAgent || world.agents[0];
+          
+          const storedYaw = sessionStorage.getItem("world3d-yaw");
+          if (!storedYaw) {
+            camera.position.set(targetAgent.x + 0.5 - 4, 2.5, targetAgent.y + 0.5 + 4);
+            yawRef.current = Math.PI * 0.75;
+            pitchRef.current = -0.2;
+          }
+        }
 
         for (const agent of world.agents) {
           const prev = prevPositionsRef.current.get(agent.id);
@@ -281,25 +304,33 @@ export default function World3D() {
 
           let mesh = agentMeshesRef.current.get(agent.id);
           if (!mesh) {
-            const geo = new THREE.CapsuleGeometry(0.3, 0.6, 4, 8);
-            const mat = new THREE.MeshLambertMaterial({ color: getAgentColor(agent) });
+            const geo = new THREE.CapsuleGeometry(0.4, 0.8, 8, 16);
+            const mat = new THREE.MeshLambertMaterial({ color: getAgentColor(agent), transparent: true });
             mesh = new THREE.Mesh(geo, mat);
             scene.add(mesh);
             agentMeshesRef.current.set(agent.id, mesh);
           }
 
-          mesh.position.set(posX + 0.5, 0.6, posY + 0.5);
-          mesh.visible = agent.status !== "downed";
-          if (agent.status === "sleeping") {
-            (mesh.material as THREE.MeshLambertMaterial).opacity = 0.5;
-            (mesh.material as THREE.MeshLambertMaterial).transparent = true;
+          const isDowned = agent.status === "downed";
+          const isSleeping = agent.status === "sleeping";
+
+          if (isDowned) {
+            mesh.position.set(posX + 0.5, 0.25, posY + 0.5);
+            mesh.rotation.set(0, 0, Math.PI / 2);
+            (mesh.material as THREE.MeshLambertMaterial).opacity = 0.4;
+          } else if (isSleeping) {
+            mesh.position.set(posX + 0.5, 0.8, posY + 0.5);
+            mesh.rotation.set(0, 0, 0);
+            (mesh.material as THREE.MeshLambertMaterial).opacity = 0.6;
           } else {
+            mesh.position.set(posX + 0.5, 0.8, posY + 0.5);
+            mesh.rotation.set(0, 0, 0);
             (mesh.material as THREE.MeshLambertMaterial).opacity = 1;
-            (mesh.material as THREE.MeshLambertMaterial).transparent = false;
           }
+          mesh.visible = true;
 
           const prev = prevPositionsRef.current.get(agent.id);
-          if (prev && (prev.x !== agent.x || prev.y !== agent.y)) {
+          if (prev && !isDowned && (prev.x !== agent.x || prev.y !== agent.y)) {
             const dx = agent.x - prev.x;
             const dy = agent.y - prev.y;
             if (dx !== 0 || dy !== 0) {
@@ -321,16 +352,16 @@ export default function World3D() {
           if (!group) {
             group = new THREE.Group();
 
-            const postGeo = new THREE.BoxGeometry(0.1, 0.6, 0.1);
+            const postGeo = new THREE.BoxGeometry(0.1, 0.8, 0.1);
             const postMat = new THREE.MeshLambertMaterial({ color: 0x5a4020 });
             const post = new THREE.Mesh(postGeo, postMat);
-            post.position.y = 0.3;
+            post.position.y = 0.4;
             group.add(post);
 
-            const plaqueGeo = new THREE.BoxGeometry(0.6, 0.3, 0.05);
+            const plaqueGeo = new THREE.BoxGeometry(0.8, 0.4, 0.08);
             const plaqueMat = new THREE.MeshLambertMaterial({ color: 0xc8a060 });
             const plaque = new THREE.Mesh(plaqueGeo, plaqueMat);
-            plaque.position.y = 0.7;
+            plaque.position.y = 0.9;
             group.add(plaque);
 
             group.position.set(sign.x + 0.5, 0, sign.y + 0.5);
@@ -351,13 +382,13 @@ export default function World3D() {
         for (const f of food) {
           let mesh = foodMeshesRef.current.get(f.id);
           if (!mesh) {
-            const geo = new THREE.SphereGeometry(0.15, 8, 8);
+            const geo = new THREE.SphereGeometry(0.25, 12, 12);
             const mat = new THREE.MeshLambertMaterial({ color: 0xff6b6b });
             mesh = new THREE.Mesh(geo, mat);
             scene.add(mesh);
             foodMeshesRef.current.set(f.id, mesh);
           }
-          mesh.position.set(f.x + 0.5, 0.15, f.y + 0.5);
+          mesh.position.set(f.x + 0.5, 0.25, f.y + 0.5);
         }
       }
 
@@ -388,10 +419,12 @@ export default function World3D() {
       rafRef.current = requestAnimationFrame(animate);
     };
 
+    animateRef.current = animate;
     rafRef.current = requestAnimationFrame(animate);
 
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      animateRef.current = null;
     };
   }, [paused]);
 
