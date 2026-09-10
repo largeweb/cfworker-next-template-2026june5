@@ -152,8 +152,12 @@ export default function World3D() {
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
-    camera.position.set(16, 3, 20);
+    camera.position.set(16, 8, 24);
+    camera.rotation.order = "YXZ";
+    camera.lookAt(16, 0, 16);
     cameraRef.current = camera;
+    yawRef.current = camera.rotation.y;
+    pitchRef.current = camera.rotation.x;
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -246,14 +250,27 @@ export default function World3D() {
 
     if (!cameraInitRef.current && agents.length > 0 && cameraRef.current) {
       cameraInitRef.current = true;
-      const idleAgent = agents.find(a => a.status === "idle" || a.status === "thinking") || agents[0];
+      const target = agents.find(a => a.status === "idle" || a.status === "thinking") || agents[0];
       const cam = cameraRef.current;
-      cam.position.set(idleAgent.x + 0.5, 2.5, idleAgent.y + 0.5 + 6);
-      cam.lookAt(idleAgent.x + 0.5, 1, idleAgent.y + 0.5);
-      const direction = new THREE.Vector3();
-      cam.getWorldDirection(direction);
-      yawRef.current = Math.atan2(direction.x, direction.z);
-      pitchRef.current = Math.asin(-direction.y);
+      
+      const agentX = target.x + 0.5;
+      const agentZ = target.y + 0.5;
+      const mapCenter = 16;
+      const spawnDist = 6;
+      
+      const towardCenter = new THREE.Vector2(mapCenter - agentX, mapCenter - agentZ).normalize();
+      let camX = agentX + towardCenter.x * spawnDist;
+      let camZ = agentZ + towardCenter.y * spawnDist;
+      
+      camX = Math.max(2, Math.min(30, camX));
+      camZ = Math.max(2, Math.min(30, camZ));
+      
+      cam.position.set(camX, 2.5, camZ);
+      cam.lookAt(agentX, 1, agentZ);
+      
+      cam.rotation.order = "YXZ";
+      yawRef.current = cam.rotation.y;
+      pitchRef.current = cam.rotation.x;
     }
 
     const agentIds = new Set(agents.map(a => a.id));
