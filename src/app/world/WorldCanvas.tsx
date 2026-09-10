@@ -297,7 +297,69 @@ function AgentModal({ agent, onClose }: { agent: Agent; onClose: () => void }) {
   );
 }
 
-function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; signs: Sign[]; onSelectAgent: (agent: Agent) => void; flavor: Flavor }) {
+function SignModal({ sign, onClose }: { sign: Sign; onClose: () => void }) {
+  const text = sign.text || "";
+  const author = (sign as Sign & { author?: string }).author;
+  const tick = (sign as Sign & { tick?: number }).tick;
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" 
+      style={{ padding: "env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)" }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-[var(--garden-paper)] border border-[var(--garden-dust)] rounded-t-2xl sm:rounded-lg shadow-xl w-full sm:max-w-md max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-4 border-b border-[var(--garden-dust)]">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">📜</span>
+            <div>
+              <h3 className="text-lg font-bold text-[var(--garden-ink)]">Sign</h3>
+              <p className="text-sm text-[var(--garden-ink-light)]">({sign.x}, {sign.y})</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 text-[var(--garden-ink-light)] hover:text-[var(--garden-ink)]">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="p-4 space-y-4 overflow-y-auto flex-1">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-[var(--garden-paper-dark)] rounded-lg p-3 text-center">
+              <div className="text-xs text-[var(--garden-ink-light)] mb-1">Position</div>
+              <div className="text-xl font-bold text-[var(--garden-ink)]">{sign.x},{sign.y}</div>
+            </div>
+            {tick !== undefined && (
+              <div className="bg-[var(--garden-paper-dark)] rounded-lg p-3 text-center">
+                <div className="text-xs text-[var(--garden-ink-light)] mb-1">Tick</div>
+                <div className="text-xl font-bold text-[var(--garden-ink)]">{tick}</div>
+              </div>
+            )}
+          </div>
+          {author && (
+            <div>
+              <div className="text-xs text-[var(--garden-ink-light)] mb-2 font-medium uppercase tracking-wider">Author</div>
+              <p className="text-base text-[var(--garden-ink)] font-serif">{author}</p>
+            </div>
+          )}
+          <div>
+            <div className="text-xs text-[var(--garden-ink-light)] mb-2 font-medium uppercase tracking-wider">Text</div>
+            {text ? (
+              <p className="text-base text-[var(--garden-ink)] font-serif leading-relaxed bg-[var(--garden-paper-dark)] p-4 rounded-lg border-l-4 border-[var(--garden-olive)]">{text}</p>
+            ) : (
+              <p className="text-base text-[var(--garden-ink-light)] font-serif">—</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CanvasMap({ agents, signs, onSelectAgent, onSelectSign, flavor }: { agents: Agent[]; signs: Sign[]; onSelectAgent: (agent: Agent) => void; onSelectSign: (sign: Sign) => void; flavor: Flavor }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lerpPositions = useRef<Map<string, LerpPosition>>(new Map());
   const prevPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
@@ -696,7 +758,17 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
         return;
       }
     }
-  }, [agents, getCurrentPositions, onSelectAgent]);
+
+    for (const sign of signs) {
+      const cx = sign.x * CELL_SIZE + CELL_SIZE / 2;
+      const cy = sign.y * CELL_SIZE + CELL_SIZE / 2;
+      const dist = Math.sqrt((clickX - cx) ** 2 + (clickY - cy) ** 2);
+      if (dist < 12) {
+        onSelectSign(sign);
+        return;
+      }
+    }
+  }, [agents, signs, getCurrentPositions, onSelectAgent, onSelectSign]);
 
   const skin = SKINS[flavor];
 
@@ -715,6 +787,7 @@ function CanvasMap({ agents, signs, onSelectAgent, flavor }: { agents: Agent[]; 
 export function WorldCanvas() {
   const { world, loading, error } = useWorld();
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [selectedSign, setSelectedSign] = useState<Sign | null>(null);
   const [canvasFailed, setCanvasFailed] = useState(false);
   const [flavor, setFlavor] = useState<Flavor>("garden");
 
@@ -732,6 +805,10 @@ export function WorldCanvas() {
     setSelectedAgent(agent);
   }, []);
 
+  const handleSelectSign = useCallback((sign: Sign) => {
+    setSelectedSign(sign);
+  }, []);
+
   return (
     <main 
       className="min-h-screen bg-[var(--garden-paper)] flex flex-col"
@@ -746,7 +823,15 @@ export function WorldCanvas() {
               <p className="text-sm text-[var(--garden-ink-light)] font-serif">tick {world.tick}</p>
             </div>
           </div>
-          <FlavorSelect value={flavor} onChange={setFlavor} />
+          <div className="flex items-center gap-2">
+            <FlavorSelect value={flavor} onChange={setFlavor} />
+            <Link
+              href="/world-3d"
+              className="text-xs bg-[var(--garden-olive)] text-white px-2 py-1 rounded hover:bg-[var(--garden-olive)]/80 transition-colors"
+            >
+              3D
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -760,7 +845,7 @@ export function WorldCanvas() {
             <div className="flex flex-col lg:flex-row gap-6">
               {!canvasFailed && (
                 <div className="flex justify-center lg:justify-start">
-                  <CanvasMap agents={world.agents} signs={world.signs} onSelectAgent={handleSelectAgent} flavor={flavor} />
+                  <CanvasMap agents={world.agents} signs={world.signs} onSelectAgent={handleSelectAgent} onSelectSign={handleSelectSign} flavor={flavor} />
                 </div>
               )}
 
@@ -813,6 +898,10 @@ export function WorldCanvas() {
 
       {selectedAgent && (
         <AgentModal agent={selectedAgent} onClose={() => setSelectedAgent(null)} />
+      )}
+
+      {selectedSign && (
+        <SignModal sign={selectedSign} onClose={() => setSelectedSign(null)} />
       )}
     </main>
   );
