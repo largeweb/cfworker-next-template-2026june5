@@ -68,47 +68,66 @@ function getAgentColor(agent: Agent): number {
   return AGENT_COLORS.unknown;
 }
 
-function getGridDimensions(grid: { width: number; height: number } | unknown[][]): { width: number; height: number } {
-  if (Array.isArray(grid)) {
-    return { width: grid.length, height: (grid[0] as unknown[] | undefined)?.length ?? 0 };
-  }
-  return { width: grid.width, height: grid.height };
+function createAgentMesh(color: number): THREE.Group {
+  const group = new THREE.Group();
+  
+  const bodyGeo = new THREE.CylinderGeometry(0.35, 0.4, 1.0, 12);
+  const bodyMat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = 0.5;
+  group.add(body);
+  
+  const headGeo = new THREE.SphereGeometry(0.3, 12, 12);
+  const headMat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 });
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.position.y = 1.15;
+  group.add(head);
+  
+  return group;
 }
 
 const LERP_DURATION = 1500;
 
 export default function World3D() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const rafRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const keysRef = useRef<Set<string>>(new Set());
   const yawRef = useRef(0);
   const pitchRef = useRef(0);
-  const agentMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const agentMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   const signMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
   const foodMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const lerpPositionsRef = useRef<Map<string, { fromX: number; fromY: number; toX: number; toY: number; startTime: number }>>(new Map());
-  const prevPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const worldDataRef = useRef<WorldData | null>(null);
-  const cameraInitializedRef = useRef(false);
-  const animateRef = useRef<(() => void) | null>(null);
+  const cameraInitRef = useRef(false);
+  const sceneReadyRef = useRef(false);
 
   const [paused, setPaused] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
+  const [worldData, setWorldData] = useState<WorldData | null>(null);
+  const [meshCount, setMeshCount] = useState(0);
+
+  useEffect(() => {
+    setIsMobile(/Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+    sessionStorage.removeItem("world3d-yaw");
+  }, []);
 
   const fetchWorld = useCallback(async () => {
     try {
       const res = await fetch("/api/world");
       if (!res.ok) throw new Error("Failed to fetch world");
       const data = await res.json() as WorldData;
-      worldDataRef.current = data;
-      setTick(data.tick);
+      const agents = Array.isArray(data.agents) ? data.agents : [];
+      const signs = Array.isArray(data.signs) ? data.signs : [];
+      const food = Array.isArray(data.food) ? data.food : [];
+      setWorldData({ ...data, agents, signs, food });
+      setTick(data.tick || 0);
       setLoading(false);
       setError(null);
     } catch (err) {
@@ -118,19 +137,10 @@ export default function World3D() {
   }, []);
 
   useEffect(() => {
-    setIsMobile(/Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
-  }, []);
-
-  useEffect(() => {
     fetchWorld();
     const interval = setInterval(fetchWorld, 10000);
     return () => clearInterval(interval);
   }, [fetchWorld]);
-
-  useEffect(() => {
-    const storedYaw = sessionStorage.getItem("world3d-yaw");
-    if (storedYaw) yawRef.current = parseFloat(storedYaw);
-  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -138,36 +148,44 @@ export default function World3D() {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87ceeb);
-    scene.fog = new THREE.Fog(0x87ceeb, 30, 80);
+    scene.fog = new THREE.Fog(0x87ceeb, 50, 120);
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(16, 2, 16);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(16, 3, 20);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "low-power" });
+    } catch {
+      setError("WebGL not supported");
+      return;
+    }
+    renderer.setPixelRatio(1);
     renderer.setSize(window.innerWidth, window.innerHeight);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    const groundGeo = new THREE.PlaneGeometry(32, 32);
+    const groundGeo = new THREE.PlaneGeometry(40, 40);
     const groundMat = new THREE.MeshLambertMaterial({ color: 0x8bc34a });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(16, 0, 16);
     scene.add(ground);
 
-    const gridHelper = new THREE.GridHelper(32, 32, 0x6b8e4a, 0x6b8e4a);
-    gridHelper.position.set(16, 0.01, 16);
+    const gridHelper = new THREE.GridHelper(40, 40, 0x6b8e4a, 0x6b8e4a);
+    gridHelper.position.set(16, 0.02, 16);
     scene.add(gridHelper);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(10, 20, 10);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    dirLight.position.set(20, 30, 20);
     scene.add(dirLight);
+
+    sceneReadyRef.current = true;
 
     const handleResize = () => {
       if (!cameraRef.current || !rendererRef.current) return;
@@ -196,32 +214,20 @@ export default function World3D() {
       yawRef.current -= e.movementX * 0.002;
       pitchRef.current -= e.movementY * 0.002;
       pitchRef.current = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitchRef.current));
-      sessionStorage.setItem("world3d-yaw", yawRef.current.toString());
     };
     window.addEventListener("mousemove", handleMouseMove);
 
-    const handleVisibility = () => {
-      if (document.hidden) {
-        if (rafRef.current !== null) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = null;
-        }
-      } else {
-        if (rafRef.current === null && mountedRef.current && animateRef.current) {
-          rafRef.current = requestAnimationFrame(animateRef.current);
-        }
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-
     return () => {
       mountedRef.current = false;
+      sceneReadyRef.current = false;
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("visibilitychange", handleVisibility);
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       renderer.dispose();
       if (containerRef.current?.contains(renderer.domElement)) {
         containerRef.current.removeChild(renderer.domElement);
@@ -230,180 +236,166 @@ export default function World3D() {
   }, []);
 
   useEffect(() => {
-    if (!sceneRef.current || !cameraRef.current || !rendererRef.current) return;
-
     const scene = sceneRef.current;
-    const camera = cameraRef.current;
-    const renderer = rendererRef.current;
+    if (!scene || !sceneReadyRef.current || !worldData) return;
+
+    const agents = worldData.agents;
+    const signs = worldData.signs;
+    const food = worldData.food || [];
+    const now = Date.now();
+
+    if (!cameraInitRef.current && agents.length > 0 && cameraRef.current) {
+      cameraInitRef.current = true;
+      const idleAgent = agents.find(a => a.status === "idle" || a.status === "thinking") || agents[0];
+      const cam = cameraRef.current;
+      cam.position.set(idleAgent.x + 0.5, 2.5, idleAgent.y + 0.5 + 6);
+      cam.lookAt(idleAgent.x + 0.5, 1, idleAgent.y + 0.5);
+      const direction = new THREE.Vector3();
+      cam.getWorldDirection(direction);
+      yawRef.current = Math.atan2(direction.x, direction.z);
+      pitchRef.current = Math.asin(-direction.y);
+    }
+
+    const agentIds = new Set(agents.map(a => a.id));
+    for (const [id, mesh] of agentMeshesRef.current) {
+      if (!agentIds.has(id)) {
+        scene.remove(mesh);
+        agentMeshesRef.current.delete(id);
+        lerpPositionsRef.current.delete(id);
+      }
+    }
+
+    for (const agent of agents) {
+      let group = agentMeshesRef.current.get(agent.id);
+      if (!group) {
+        group = createAgentMesh(getAgentColor(agent));
+        scene.add(group);
+        agentMeshesRef.current.set(agent.id, group);
+        lerpPositionsRef.current.set(agent.id, {
+          fromX: agent.x, fromY: agent.y,
+          toX: agent.x, toY: agent.y,
+          startTime: now,
+        });
+      } else {
+        const lerp = lerpPositionsRef.current.get(agent.id);
+        if (lerp && (lerp.toX !== agent.x || lerp.toY !== agent.y)) {
+          const elapsed = Math.min(1, (now - lerp.startTime) / LERP_DURATION);
+          const currentX = lerp.fromX + (lerp.toX - lerp.fromX) * elapsed;
+          const currentY = lerp.fromY + (lerp.toY - lerp.fromY) * elapsed;
+          lerpPositionsRef.current.set(agent.id, {
+            fromX: currentX, fromY: currentY,
+            toX: agent.x, toY: agent.y,
+            startTime: now,
+          });
+        }
+      }
+
+      const isDowned = agent.status === "downed";
+      const isSleeping = agent.status === "sleeping";
+      const opacity = isDowned ? 0.4 : isSleeping ? 0.6 : 1;
+      group.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshLambertMaterial) {
+          child.material.opacity = opacity;
+        }
+      });
+      group.rotation.z = isDowned ? Math.PI / 2 : 0;
+      group.userData.isDowned = isDowned;
+    }
+
+    const signIds = new Set(signs.map(s => s.id));
+    for (const [id, group] of signMeshesRef.current) {
+      if (!signIds.has(id)) {
+        scene.remove(group);
+        signMeshesRef.current.delete(id);
+      }
+    }
+
+    for (const sign of signs) {
+      if (!signMeshesRef.current.has(sign.id)) {
+        const group = new THREE.Group();
+
+        const postGeo = new THREE.BoxGeometry(0.12, 1.0, 0.12);
+        const postMat = new THREE.MeshLambertMaterial({ color: 0x5a4020 });
+        const post = new THREE.Mesh(postGeo, postMat);
+        post.position.y = 0.5;
+        group.add(post);
+
+        const plaqueGeo = new THREE.BoxGeometry(0.9, 0.5, 0.1);
+        const plaqueMat = new THREE.MeshLambertMaterial({ color: 0xc8a060 });
+        const plaque = new THREE.Mesh(plaqueGeo, plaqueMat);
+        plaque.position.y = 1.1;
+        group.add(plaque);
+
+        group.position.set(sign.x + 0.5, 0, sign.y + 0.5);
+        scene.add(group);
+        signMeshesRef.current.set(sign.id, group);
+      }
+    }
+
+    const foodIds = new Set(food.map(f => f.id));
+    for (const [id, mesh] of foodMeshesRef.current) {
+      if (!foodIds.has(id)) {
+        scene.remove(mesh);
+        foodMeshesRef.current.delete(id);
+      }
+    }
+
+    for (const f of food) {
+      if (!foodMeshesRef.current.has(f.id)) {
+        const geo = new THREE.SphereGeometry(0.3, 12, 12);
+        const mat = new THREE.MeshLambertMaterial({ color: 0xff6b6b });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(f.x + 0.5, 0.3, f.y + 0.5);
+        scene.add(mesh);
+        foodMeshesRef.current.set(f.id, mesh);
+      }
+    }
+
+    setMeshCount(agentMeshesRef.current.size + signMeshesRef.current.size + foodMeshesRef.current.size);
+  }, [worldData]);
+
+  useEffect(() => {
+    if (!sceneReadyRef.current) return;
 
     const animate = () => {
       if (!mountedRef.current) return;
-      if (document.hidden) {
-        rafRef.current = null;
+
+      const scene = sceneRef.current;
+      const camera = cameraRef.current;
+      const renderer = rendererRef.current;
+
+      if (!scene || !camera || !renderer) {
+        rafRef.current = requestAnimationFrame(animate);
         return;
       }
 
-      const world = worldDataRef.current;
-      if (world) {
-        const now = Date.now();
+      if (document.hidden) {
+        rafRef.current = requestAnimationFrame(animate);
+        return;
+      }
 
-        if (!cameraInitializedRef.current && world.agents.length > 0) {
-          cameraInitializedRef.current = true;
-          const idleAgent = world.agents.find(a => a.status === "idle" || a.status === "thinking");
-          const targetAgent = idleAgent || world.agents[0];
-          
-          const storedYaw = sessionStorage.getItem("world3d-yaw");
-          if (!storedYaw) {
-            camera.position.set(targetAgent.x + 0.5 - 4, 2.5, targetAgent.y + 0.5 + 4);
-            yawRef.current = Math.PI * 0.75;
-            pitchRef.current = -0.2;
-          }
-        }
+      const now = Date.now();
+      for (const [id, lerp] of lerpPositionsRef.current) {
+        const mesh = agentMeshesRef.current.get(id);
+        if (!mesh) continue;
 
-        for (const agent of world.agents) {
-          const prev = prevPositionsRef.current.get(agent.id);
-          const current = lerpPositionsRef.current.get(agent.id);
+        const elapsed = now - lerp.startTime;
+        const t = Math.min(1, elapsed / LERP_DURATION);
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        const posX = lerp.fromX + (lerp.toX - lerp.fromX) * eased;
+        const posY = lerp.fromY + (lerp.toY - lerp.fromY) * eased;
 
-          if (!prev) {
-            lerpPositionsRef.current.set(agent.id, {
-              fromX: agent.x, fromY: agent.y,
-              toX: agent.x, toY: agent.y,
-              startTime: now,
-            });
-          } else if (prev.x !== agent.x || prev.y !== agent.y) {
-            const elapsed = current ? Math.min(1, (now - current.startTime) / LERP_DURATION) : 1;
-            const currentX = current ? current.fromX + (current.toX - current.fromX) * elapsed : prev.x;
-            const currentY = current ? current.fromY + (current.toY - current.fromY) * elapsed : prev.y;
-            lerpPositionsRef.current.set(agent.id, {
-              fromX: currentX, fromY: currentY,
-              toX: agent.x, toY: agent.y,
-              startTime: now,
-            });
-          }
-          prevPositionsRef.current.set(agent.id, { x: agent.x, y: agent.y });
-        }
-
-        const agentIds = new Set(world.agents.map(a => a.id));
-        for (const [id, mesh] of agentMeshesRef.current) {
-          if (!agentIds.has(id)) {
-            scene.remove(mesh);
-            agentMeshesRef.current.delete(id);
-          }
-        }
-
-        for (const agent of world.agents) {
-          const lerp = lerpPositionsRef.current.get(agent.id);
-          let posX = agent.x;
-          let posY = agent.y;
-          if (lerp) {
-            const elapsed = now - lerp.startTime;
-            const t = Math.min(1, elapsed / LERP_DURATION);
-            posX = lerp.fromX + (lerp.toX - lerp.fromX) * t;
-            posY = lerp.fromY + (lerp.toY - lerp.fromY) * t;
-          }
-
-          let mesh = agentMeshesRef.current.get(agent.id);
-          if (!mesh) {
-            const geo = new THREE.CapsuleGeometry(0.4, 0.8, 8, 16);
-            const mat = new THREE.MeshLambertMaterial({ color: getAgentColor(agent), transparent: true });
-            mesh = new THREE.Mesh(geo, mat);
-            scene.add(mesh);
-            agentMeshesRef.current.set(agent.id, mesh);
-          }
-
-          const isDowned = agent.status === "downed";
-          const isSleeping = agent.status === "sleeping";
-
-          if (isDowned) {
-            mesh.position.set(posX + 0.5, 0.25, posY + 0.5);
-            mesh.rotation.set(0, 0, Math.PI / 2);
-            (mesh.material as THREE.MeshLambertMaterial).opacity = 0.4;
-          } else if (isSleeping) {
-            mesh.position.set(posX + 0.5, 0.8, posY + 0.5);
-            mesh.rotation.set(0, 0, 0);
-            (mesh.material as THREE.MeshLambertMaterial).opacity = 0.6;
-          } else {
-            mesh.position.set(posX + 0.5, 0.8, posY + 0.5);
-            mesh.rotation.set(0, 0, 0);
-            (mesh.material as THREE.MeshLambertMaterial).opacity = 1;
-          }
-          mesh.visible = true;
-
-          const prev = prevPositionsRef.current.get(agent.id);
-          if (prev && !isDowned && (prev.x !== agent.x || prev.y !== agent.y)) {
-            const dx = agent.x - prev.x;
-            const dy = agent.y - prev.y;
-            if (dx !== 0 || dy !== 0) {
-              mesh.rotation.y = Math.atan2(dx, dy);
-            }
-          }
-        }
-
-        const signIds = new Set(world.signs.map(s => s.id));
-        for (const [id, group] of signMeshesRef.current) {
-          if (!signIds.has(id)) {
-            scene.remove(group);
-            signMeshesRef.current.delete(id);
-          }
-        }
-
-        for (const sign of world.signs) {
-          let group = signMeshesRef.current.get(sign.id);
-          if (!group) {
-            group = new THREE.Group();
-
-            const postGeo = new THREE.BoxGeometry(0.1, 0.8, 0.1);
-            const postMat = new THREE.MeshLambertMaterial({ color: 0x5a4020 });
-            const post = new THREE.Mesh(postGeo, postMat);
-            post.position.y = 0.4;
-            group.add(post);
-
-            const plaqueGeo = new THREE.BoxGeometry(0.8, 0.4, 0.08);
-            const plaqueMat = new THREE.MeshLambertMaterial({ color: 0xc8a060 });
-            const plaque = new THREE.Mesh(plaqueGeo, plaqueMat);
-            plaque.position.y = 0.9;
-            group.add(plaque);
-
-            group.position.set(sign.x + 0.5, 0, sign.y + 0.5);
-            scene.add(group);
-            signMeshesRef.current.set(sign.id, group);
-          }
-        }
-
-        const food = world.food || [];
-        const foodIds = new Set(food.map(f => f.id));
-        for (const [id, mesh] of foodMeshesRef.current) {
-          if (!foodIds.has(id)) {
-            scene.remove(mesh);
-            foodMeshesRef.current.delete(id);
-          }
-        }
-
-        for (const f of food) {
-          let mesh = foodMeshesRef.current.get(f.id);
-          if (!mesh) {
-            const geo = new THREE.SphereGeometry(0.25, 12, 12);
-            const mat = new THREE.MeshLambertMaterial({ color: 0xff6b6b });
-            mesh = new THREE.Mesh(geo, mat);
-            scene.add(mesh);
-            foodMeshesRef.current.set(f.id, mesh);
-          }
-          mesh.position.set(f.x + 0.5, 0.25, f.y + 0.5);
+        if (mesh.userData.isDowned) {
+          mesh.position.set(posX + 0.5, 0.4, posY + 0.5);
+        } else {
+          mesh.position.set(posX + 0.5, 0, posY + 0.5);
         }
       }
 
       if (!paused) {
-        const speed = 0.15;
-        const forward = new THREE.Vector3(
-          Math.sin(yawRef.current),
-          0,
-          Math.cos(yawRef.current)
-        );
-        const right = new THREE.Vector3(
-          Math.sin(yawRef.current + Math.PI / 2),
-          0,
-          Math.cos(yawRef.current + Math.PI / 2)
-        );
+        const speed = 0.12;
+        const forward = new THREE.Vector3(Math.sin(yawRef.current), 0, Math.cos(yawRef.current));
+        const right = new THREE.Vector3(Math.sin(yawRef.current + Math.PI / 2), 0, Math.cos(yawRef.current + Math.PI / 2));
 
         if (keysRef.current.has("w")) camera.position.add(forward.clone().multiplyScalar(speed));
         if (keysRef.current.has("s")) camera.position.add(forward.clone().multiplyScalar(-speed));
@@ -419,12 +411,13 @@ export default function World3D() {
       rafRef.current = requestAnimationFrame(animate);
     };
 
-    animateRef.current = animate;
     rafRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      animateRef.current = null;
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
   }, [paused]);
 
@@ -444,26 +437,16 @@ export default function World3D() {
   const handleMobileMove = useCallback((dx: number, dy: number) => {
     const camera = cameraRef.current;
     if (!camera) return;
-    const forward = new THREE.Vector3(
-      Math.sin(yawRef.current),
-      0,
-      Math.cos(yawRef.current)
-    );
-    const right = new THREE.Vector3(
-      Math.sin(yawRef.current + Math.PI / 2),
-      0,
-      Math.cos(yawRef.current + Math.PI / 2)
-    );
-    camera.position.add(forward.clone().multiplyScalar(dy * 0.2));
-    camera.position.add(right.clone().multiplyScalar(dx * 0.2));
+    const forward = new THREE.Vector3(Math.sin(yawRef.current), 0, Math.cos(yawRef.current));
+    const right = new THREE.Vector3(Math.sin(yawRef.current + Math.PI / 2), 0, Math.cos(yawRef.current + Math.PI / 2));
+    camera.position.add(forward.clone().multiplyScalar(dy * 0.3));
+    camera.position.add(right.clone().multiplyScalar(dx * 0.3));
   }, []);
 
   const handleMobileLook = useCallback((dx: number, dy: number) => {
     yawRef.current -= dx * 0.01;
     pitchRef.current -= dy * 0.01;
     pitchRef.current = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitchRef.current));
-    sessionStorage.setItem("world3d-yaw", yawRef.current.toString());
-
     if (cameraRef.current) {
       cameraRef.current.rotation.order = "YXZ";
       cameraRef.current.rotation.y = yawRef.current;
@@ -471,13 +454,17 @@ export default function World3D() {
     }
   }, []);
 
+  const agentCount = worldData?.agents?.length ?? 0;
+
   return (
     <div className="fixed inset-0 bg-black">
       <div ref={containerRef} className="w-full h-full" onClick={handleCanvasClick} />
 
-      <div className="absolute top-4 left-4 text-white text-sm bg-black/50 px-3 py-2 rounded">
-        <div>Tick: {tick}</div>
-        {loading && <div className="text-yellow-300">Loading...</div>}
+      <div className="absolute top-4 left-4 text-white text-sm bg-black/60 px-3 py-2 rounded font-mono">
+        <div>tick: {tick}</div>
+        <div>agents: {agentCount}</div>
+        <div>meshes: {meshCount}</div>
+        {loading && <div className="text-yellow-300">loading...</div>}
         {error && <div className="text-red-300">{error}</div>}
       </div>
 
@@ -485,35 +472,35 @@ export default function World3D() {
         <>
           <div className="absolute bottom-24 left-4 flex flex-col gap-2">
             <button
-              className="w-12 h-12 bg-white/30 rounded-lg flex items-center justify-center text-white text-2xl active:bg-white/50"
+              className="w-14 h-14 bg-white/40 rounded-lg flex items-center justify-center text-white text-2xl active:bg-white/60 font-bold"
               onTouchStart={() => handleMobileMove(0, 1)}
             >
-              ↑
+              W
             </button>
             <div className="flex gap-2">
               <button
-                className="w-12 h-12 bg-white/30 rounded-lg flex items-center justify-center text-white text-2xl active:bg-white/50"
+                className="w-14 h-14 bg-white/40 rounded-lg flex items-center justify-center text-white text-2xl active:bg-white/60 font-bold"
                 onTouchStart={() => handleMobileMove(-1, 0)}
               >
-                ←
+                A
               </button>
               <button
-                className="w-12 h-12 bg-white/30 rounded-lg flex items-center justify-center text-white text-2xl active:bg-white/50"
+                className="w-14 h-14 bg-white/40 rounded-lg flex items-center justify-center text-white text-2xl active:bg-white/60 font-bold"
                 onTouchStart={() => handleMobileMove(1, 0)}
               >
-                →
+                D
               </button>
             </div>
             <button
-              className="w-12 h-12 bg-white/30 rounded-lg flex items-center justify-center text-white text-2xl active:bg-white/50"
+              className="w-14 h-14 bg-white/40 rounded-lg flex items-center justify-center text-white text-2xl active:bg-white/60 font-bold"
               onTouchStart={() => handleMobileMove(0, -1)}
             >
-              ↓
+              S
             </button>
           </div>
 
           <div
-            className="absolute bottom-24 right-4 w-32 h-32 bg-white/20 rounded-lg"
+            className="absolute bottom-24 right-4 w-36 h-36 bg-white/30 rounded-lg border-2 border-white/50"
             onTouchMove={(e) => {
               const touch = e.touches[0];
               const rect = e.currentTarget.getBoundingClientRect();
@@ -522,23 +509,23 @@ export default function World3D() {
               handleMobileLook(dx * 5, dy * 5);
             }}
           >
-            <div className="w-full h-full flex items-center justify-center text-white/50 text-xs">
+            <div className="w-full h-full flex items-center justify-center text-white/60 text-sm font-bold">
               LOOK
             </div>
           </div>
 
           <button
-            className="absolute top-4 right-4 bg-white/30 px-4 py-2 rounded text-white"
+            className="absolute top-4 right-4 bg-white/40 px-4 py-2 rounded text-white font-bold"
             onClick={() => setPaused(true)}
           >
-            Pause
+            PAUSE
           </button>
         </>
       )}
 
       {!isMobile && !paused && (
-        <div className="absolute bottom-4 left-4 text-white/70 text-xs">
-          WASD to move • Mouse to look • ESC to pause
+        <div className="absolute bottom-4 left-4 text-white/80 text-sm">
+          WASD move • Mouse look • ESC pause
         </div>
       )}
 
